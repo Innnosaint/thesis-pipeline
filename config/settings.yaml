@@ -1,0 +1,46 @@
+baseline:
+  min_observations: 10
+  window_size: 50
+  sigma_floor: 0.0
+debounce:
+  min_consecutive: 1
+correlation:
+  benign_keywords:
+  - backup
+  - rsync
+  - cron
+  - apt
+  - yum
+  - package install
+  - scheduled task
+  delta_t_seconds: 30
+  failure_keywords:
+  - disk full
+  - i/o error
+  - write failure
+  - inode exhausted
+  - filesystem read-only
+  - device error
+  - no space left
+evaluation:
+  rolling_window_for_metrics: 100
+parsing:
+  disk_usage_regex: disk usage[:=]?\s*(\d{1,3})%
+  drain_state_file: data/processed/drain3_state.json
+paths:
+  audit_log: logs/audit_trail.jsonl
+  ground_truth_dir: data/ground_truth
+  processed_dir: data/processed
+  raw_log_dir: data/raw
+  results_dir: results
+priority_weights:
+  HIGH: 1.5
+  LOW: 0.5
+  MEDIUM: 1.0
+replay:
+  max_lines: null
+  speed_multiplier: 60
+zscore:
+  theta_z: 5.5
+  hard_ceiling: 85.0
+

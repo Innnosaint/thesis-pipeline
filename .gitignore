@@ -1,0 +1,5 @@
+venv/
+data/raw/*.log
+data/processed/
+__pycache__/
+*.pyc
