@@ -28,7 +28,7 @@ Usage:
         --output ../data/raw/Linux_full_augmented.log \
         --labels ../data/ground_truth/labels.jsonl \
         --interval-minutes 5 \
-        --fallback-year 2004
+        --fallback-year 2024
 """
 
 import argparse
@@ -219,7 +219,7 @@ def main():
                          help="Path to write ground_truth labels.jsonl")
     parser.add_argument("--interval-minutes", type=int, default=5,
                          help="Sampling interval for synthetic readings")
-    parser.add_argument("--fallback-year", type=int, default=2004,
+    parser.add_argument("--fallback-year", type=int, default=2024,
                          help="Year to assume for year-less timestamps")
     parser.add_argument("--seed", type=int, default=42,
                          help="Random seed for reproducibility")

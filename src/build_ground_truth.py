@@ -21,6 +21,7 @@ procedure, separate from the algorithm being evaluated.
 """
 
 import argparse
+from bisect import bisect_left
 import json
 import re
 from pathlib import Path
@@ -92,22 +93,30 @@ def extract_diskmon_readings(all_entries, log_source_name: str):
     return readings
 
 
+_TS_CACHE = {}
+
+
 def has_failure_signature_nearby(all_entries, center_time, delta_t_seconds, failure_keywords):
-    """Scans the raw line text (not the diskmon line itself) within
-    +/- delta_t of center_time for any failure keyword. Independent of
-    the detection algorithm's own correlation module."""
+    """Scans the raw line text within +/- delta_t of center_time for any
+    failure keyword. Uses bisect on a cached timestamp list, so each lookup
+    is O(log n + window) instead of O(n). Independent of the detection
+    algorithm's own correlation module."""
+    ts_list = _TS_CACHE.get(id(all_entries))
+    if ts_list is None:
+        ts_list = [t for t, _ in all_entries]
+        _TS_CACHE[id(all_entries)] = ts_list
+
     lo = center_time - timedelta(seconds=delta_t_seconds)
     hi = center_time + timedelta(seconds=delta_t_seconds)
 
-    for ts, line in all_entries:
-        if ts < lo:
-            continue
-        if ts > hi:
-            break
-        line_lower = line.lower()
+    i = bisect_left(ts_list, lo)
+    n = len(ts_list)
+    while i < n and ts_list[i] <= hi:
+        line_lower = all_entries[i][1].lower()
         for kw in failure_keywords:
             if kw.lower() in line_lower:
                 return True, kw
+        i += 1
     return False, None
 
 
@@ -118,7 +127,7 @@ def build_labels(
     critical_pct: float = 85.0,
     delta_t_seconds: int = 60,
     failure_keywords=None,
-    fallback_year: int = 2004,
+    fallback_year: int = 2024,
 ):
     if failure_keywords is None:
         failure_keywords = DEFAULT_FAILURE_KEYWORDS
@@ -187,7 +196,7 @@ if __name__ == "__main__":
                          help="Disk usage %% at or above which a reading is auto-labeled anomalous")
     parser.add_argument("--delta-t", type=int, default=60,
                          help="Seconds +/- around a reading to scan for failure keywords")
-    parser.add_argument("--fallback-year", type=int, default=2004,
+    parser.add_argument("--fallback-year", type=int, default=2024,
                          help="Year to assume for logs with no year in timestamp")
     args = parser.parse_args()
 

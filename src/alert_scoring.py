@@ -56,7 +56,7 @@ if __name__ == "__main__":
     with open(PROJECT_ROOT / "config" / "settings.yaml") as f:
         cfg = yaml.safe_load(f)
 
-    in_path = PROJECT_ROOT / cfg["paths"]["processed_dir"] / "scored_stream.jsonl"
+    in_path = PROJECT_ROOT / cfg["paths"]["processed_dir"] / "final_scored_stream.jsonl"
     entries = []
     with open(in_path) as f:
         for line in f:
