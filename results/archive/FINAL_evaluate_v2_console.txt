@@ -1,0 +1,36 @@
+Loading scored stream from ../data/processed/final_scored_stream.jsonl ...
+  105122 scored entries loaded.
+Loading ground truth from ../data/ground_truth/labels.jsonl ...
+  105122 labeled entries loaded.
+  105122 / 105122 ground truth timestamps matched against the scored stream.
+
+=== Enhanced Algorithm (Dynamic Baseline + Z-Score + Correlation) ===
+  True Positives  (TP): 27
+  False Positives (FP): 0
+  True Negatives  (TN): 105067
+  False Negatives (FN): 18
+  ------------------------------
+  Precision : 1.0000
+  Recall    : 0.6000
+  FPR       : 0.0000
+  Accuracy  : 0.9998
+
+=== Static Threshold Baseline (>= 80.0%) ===
+  True Positives  (TP): 39
+  False Positives (FP): 25
+  True Negatives  (TN): 105042
+  False Negatives (FN): 6
+  ------------------------------
+  Precision : 0.6094
+  Recall    : 0.8667
+  FPR       : 0.0002
+  Accuracy  : 0.9997
+
+=== Summary Comparison ===
+Metric            Static    Enhanced       Delta
+precision         0.6094      1.0000     +0.3906
+recall            0.8667      0.6000     -0.2667
+fpr               0.0002      0.0000     -0.0002
+accuracy          0.9997      0.9998     +0.0001
+
+Summary written to ../results/FINAL_evaluate_v2.csv

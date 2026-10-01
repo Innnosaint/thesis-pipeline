@@ -1,0 +1,5 @@
+method,TP,FP,FN,TN,precision,recall,f1
+Static 80%,39,25,6,105042,0.6094,0.8667,0.7156
+Static 85%,39,0,6,105067,1.0,0.8667,0.9286
+Enhanced (suppression on),27,0,18,105067,1.0,0.6,0.75
+Hybrid (correlation=priority only),39,0,6,105067,1.0,0.8667,0.9286

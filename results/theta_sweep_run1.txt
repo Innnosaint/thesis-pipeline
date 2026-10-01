@@ -1,0 +1,19 @@
+Loading scored stream from ../data/processed/final_scored_stream_permissive.jsonl ...
+  105122 scored entries loaded.
+Loading ground truth from ../data/ground_truth/labels.jsonl ...
+  105122 labeled entries loaded.
+
+ theta_z     TP       FP       TN     FN   Precision    Recall       FPR        F1
+----------------------------------------------------------------------------------
+    1.50     29    28558    76509     16      0.0010    0.6444    0.2718    0.0020
+    2.00     14    12296    92771     31      0.0011    0.3111    0.1170    0.0023
+    2.50     13     4170   100897     32      0.0031    0.2889    0.0397    0.0061
+    3.00     12     1122   103945     33      0.0106    0.2667    0.0107    0.0204
+    3.50     12      245   104822     33      0.0467    0.2667    0.0023    0.0795
+    4.00     12       59   105008     33      0.1690    0.2667    0.0006    0.2069
+
+STATIC 80%     39       25   105042      6      0.6094    0.8667    0.0002    0.7156
+
+Best F1 among tested theta_z values: theta_z=4.0 (F1=0.2069, Precision=0.1690, Recall=0.2667)
+
+Sweep results written to /tmp/ts_run1.csv

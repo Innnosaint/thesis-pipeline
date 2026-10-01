@@ -40,7 +40,7 @@ python -u diagnose_false_positives.py --scored $P/final_scored_stream_default.js
 
 echo "### 3.6.2 -- real-time replay (no lookahead)"
 python -u run_pipeline.py >/dev/null   # restore final stream/audit trail
-python -u replay_simulator.py
+python -u replay_simulator.py --speed 1e9
 
 echo "### Tables 4.1-4.3 regenerated + checked against the paper"
 python -u make_tables.py | tee ../results/tables_check.txt

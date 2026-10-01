@@ -1,0 +1,1747 @@
+### 4.2 Ground truth (independent of the algorithm)
+Loading and timestamp-parsing all lines from ../data/raw/Linux_full.log ...
+  129043 timestamped lines loaded.
+Extracting diskmon readings ...
+  105122 diskmon readings found.
+Labeling: critical_pct >= 85.0% OR failure keyword within +/-60s ...
+
+Done. Wrote 105122 labels to ../data/ground_truth/labels.jsonl
+  Anomalies flagged: 45 (0.04%)
+    - by critical threshold (>= 85.0%): 39
+    - by nearby failure keyword: 6
+  Normal: 105077
+### Final pipeline (theta_z=5.5, ceiling=85, W=50) + permissive stream for theta_sweep
+[1/6] Ingesting + Drain3 parsing from data/raw ...
+      129043 timestamped log lines parsed
+[2/6] Preprocessing (filter, dedup, segment) ...
+      105122 disk-usage readings kept
+[3/6] Dynamic baseline (W=50) ...
+[4/6] Z-Score detection (theta_z=5.5, hard_ceiling=85.0) ...
+      39 readings flagged ABNORMAL
+[5/6] Contextual log correlation (+/-30s, all log lines) ...
+      12 suppressed as benign, 12 escalated HIGH
+[6/6] Ranking alerts + writing audit trail ...
+
+Top 10 alerts by Enhanced Alert Score:
+
+ 1. [HIGH  ] score=31.71 z=21.14 disk=100.2% @ 2024-06-19T06:57:05 kw=disk full
+ 2. [HIGH  ] score=28.11 z=18.74 disk=92.2% @ 2024-07-03T02:07:05 kw=i/o error
+ 3. [HIGH  ] score=22.52 z=15.01 disk=92.3% @ 2024-03-22T09:22:05 kw=filesystem read-only
+ 4. [HIGH  ] score=21.06 z=14.04 disk=91.3% @ 2024-02-16T09:47:05 kw=i/o error
+ 5. [HIGH  ] score=20.00 z=13.33 disk=90.4% @ 2024-03-31T01:12:05 kw=inode exhausted
+ 6. [HIGH  ] score=19.71 z=13.14 disk=92.1% @ 2024-03-28T23:22:05 kw=filesystem read-only
+ 7. [HIGH  ] score=9.88 z=6.59 disk=92.5% @ 2024-07-03T02:12:05 kw=i/o error
+ 8. [HIGH  ] score=9.68 z=6.45 disk=92.8% @ 2024-02-16T09:52:05 kw=i/o error
+ 9. [HIGH  ] score=9.66 z=6.44 disk=93.2% @ 2024-03-22T09:27:05 kw=filesystem read-only
+10. [HIGH  ] score=9.60 z=6.40 disk=98.1% @ 2024-06-19T07:02:05 kw=disk full
+
+Final stream : /home/coco/thesis/data/processed/final_scored_stream.jsonl
+Audit trail  : logs/audit_trail.jsonl
+### Table 4.3 -- static vs enhanced
+Loading scored stream from ../data/processed/final_scored_stream.jsonl ...
+  105122 scored entries loaded.
+Loading ground truth from ../data/ground_truth/labels.jsonl ...
+  105122 labeled entries loaded.
+  105122 / 105122 ground truth timestamps matched against the scored stream.
+
+=== Enhanced Algorithm (Dynamic Baseline + Z-Score + Correlation) ===
+  True Positives  (TP): 27
+  False Positives (FP): 0
+  True Negatives  (TN): 105067
+  False Negatives (FN): 18
+  ------------------------------
+  Precision : 1.0000
+  Recall    : 0.6000
+  FPR       : 0.0000
+  Accuracy  : 0.9998
+
+=== Static Threshold Baseline (>= 80.0%) ===
+  True Positives  (TP): 39
+  False Positives (FP): 25
+  True Negatives  (TN): 105042
+  False Negatives (FN): 6
+  ------------------------------
+  Precision : 0.6094
+  Recall    : 0.8667
+  FPR       : 0.0002
+  Accuracy  : 0.9997
+
+=== Summary Comparison ===
+Metric            Static    Enhanced       Delta
+precision         0.6094      1.0000     +0.3906
+recall            0.8667      0.6000     -0.2667
+fpr               0.0002      0.0000     -0.0002
+accuracy          0.9997      0.9998     +0.0001
+
+Summary written to ../results/final_comparison.csv
+### Table 4.1 -- theta_z sweep (W=50, no ceiling)
+Loading scored stream from ../data/processed/final_scored_stream_permissive.jsonl ...
+  105122 scored entries loaded.
+Loading ground truth from ../data/ground_truth/labels.jsonl ...
+  105122 labeled entries loaded.
+
+ theta_z     TP       FP       TN     FN   Precision    Recall       FPR        F1
+----------------------------------------------------------------------------------
+    1.50     29    28558    76509     16      0.0010    0.6444    0.2718    0.0020
+    2.00     14    12296    92771     31      0.0011    0.3111    0.1170    0.0023
+    2.50     13     4170   100897     32      0.0031    0.2889    0.0397    0.0061
+    3.00     12     1122   103945     33      0.0106    0.2667    0.0107    0.0204
+    3.50     12      245   104822     33      0.0467    0.2667    0.0023    0.0795
+    4.00     12       59   105008     33      0.1690    0.2667    0.0006    0.2069
+
+STATIC 80%     39       25   105042      6      0.6094    0.8667    0.0002    0.7156
+
+Best F1 among tested theta_z values: theta_z=4.0 (F1=0.2069, Precision=0.1690, Recall=0.2667)
+
+Sweep results written to ../results/theta_sweep.csv
+### 4.4 -- window-size sweep (theta_z=2.0)
+105122 entries, 105122 labels, context=all log lines
+
+     W  min_obs    TP      FP       TN    FN  Precision   Recall      FPR       F1
+----------------------------------------------------------------------------------
+    10        5    17   11601    93471    28     0.0015   0.3778   0.1104   0.0029
+    15        5    18    9923    95149    27     0.0018   0.4000   0.0944   0.0036
+    20        5    17    9606    95466    28     0.0018   0.3778   0.0914   0.0035
+    30        6    14   10197    94874    31     0.0014   0.3111   0.0970   0.0027
+    50       10    14   12296    92771    31     0.0011   0.3111   0.1170   0.0023
+    75       15    13   14299    90763    32     0.0009   0.2889   0.1361   0.0018
+   100       20    19   15854    89203    26     0.0012   0.4222   0.1509   0.0024
+   150       30    23   17204    87843    22     0.0013   0.5111   0.1638   0.0027
+   200       40    23   12857    92180    22     0.0018   0.5111   0.1224   0.0036
+
+Best F1: W=15 (F1=0.0036, P=0.0018, R=0.4)
+Written to ../results/window_sweep.csv
+### Joint W x theta_z grid
+105122 entries, 105122 labels (45 anomalies)
+
+[1/64] W=  10 theta_z= 1.5  TP= 24 FP= 22952 FN= 21  P=0.0010 R=0.5333 F1=0.0021
+[2/64] W=  10 theta_z= 2.0  TP= 17 FP= 11601 FN= 28  P=0.0015 R=0.3778 F1=0.0029
+[3/64] W=  10 theta_z= 2.5  TP= 14 FP=  5682 FN= 31  P=0.0025 R=0.3111 F1=0.0049
+[4/64] W=  10 theta_z= 3.0  TP= 10 FP=  2705 FN= 35  P=0.0037 R=0.2222 F1=0.0072
+[5/64] W=  10 theta_z= 3.5  TP=  6 FP=  1318 FN= 39  P=0.0045 R=0.1333 F1=0.0088
+[6/64] W=  10 theta_z= 4.0  TP=  6 FP=   662 FN= 39  P=0.0090 R=0.1333 F1=0.0168
+[7/64] W=  10 theta_z= 4.5  TP=  6 FP=   320 FN= 39  P=0.0184 R=0.1333 F1=0.0323
+[8/64] W=  10 theta_z= 5.0  TP=  6 FP=   172 FN= 39  P=0.0337 R=0.1333 F1=0.0538
+[9/64] W=  20 theta_z= 1.5  TP= 27 FP= 21280 FN= 18  P=0.0013 R=0.6000 F1=0.0025
+[10/64] W=  20 theta_z= 2.0  TP= 17 FP=  9606 FN= 28  P=0.0018 R=0.3778 F1=0.0035
+[11/64] W=  20 theta_z= 2.5  TP= 13 FP=  3931 FN= 32  P=0.0033 R=0.2889 F1=0.0065
+[12/64] W=  20 theta_z= 3.0  TP= 12 FP=  1495 FN= 33  P=0.0080 R=0.2667 F1=0.0155
+[13/64] W=  20 theta_z= 3.5  TP= 12 FP=   512 FN= 33  P=0.0229 R=0.2667 F1=0.0422
+[14/64] W=  20 theta_z= 4.0  TP= 12 FP=   175 FN= 33  P=0.0642 R=0.2667 F1=0.1034
+[15/64] W=  20 theta_z= 4.5  TP=  6 FP=    63 FN= 39  P=0.0870 R=0.1333 F1=0.1053
+[16/64] W=  20 theta_z= 5.0  TP=  6 FP=    27 FN= 39  P=0.1818 R=0.1333 F1=0.1538
+[17/64] W=  30 theta_z= 1.5  TP= 27 FP= 22967 FN= 18  P=0.0012 R=0.6000 F1=0.0023
+[18/64] W=  30 theta_z= 2.0  TP= 14 FP= 10197 FN= 31  P=0.0014 R=0.3111 F1=0.0027
+[19/64] W=  30 theta_z= 2.5  TP= 13 FP=  3861 FN= 32  P=0.0034 R=0.2889 F1=0.0066
+[20/64] W=  30 theta_z= 3.0  TP= 12 FP=  1336 FN= 33  P=0.0089 R=0.2667 F1=0.0172
+[21/64] W=  30 theta_z= 3.5  TP= 12 FP=   412 FN= 33  P=0.0283 R=0.2667 F1=0.0512
+[22/64] W=  30 theta_z= 4.0  TP= 12 FP=   103 FN= 33  P=0.1043 R=0.2667 F1=0.1500
+[23/64] W=  30 theta_z= 4.5  TP= 12 FP=    36 FN= 33  P=0.2500 R=0.2667 F1=0.2581
+[24/64] W=  30 theta_z= 5.0  TP= 12 FP=    12 FN= 33  P=0.5000 R=0.2667 F1=0.3478
+[25/64] W=  50 theta_z= 1.5  TP= 29 FP= 28558 FN= 16  P=0.0010 R=0.6444 F1=0.0020
+[26/64] W=  50 theta_z= 2.0  TP= 14 FP= 12296 FN= 31  P=0.0011 R=0.3111 F1=0.0023
+[27/64] W=  50 theta_z= 2.5  TP= 13 FP=  4170 FN= 32  P=0.0031 R=0.2889 F1=0.0061
+[28/64] W=  50 theta_z= 3.0  TP= 12 FP=  1122 FN= 33  P=0.0106 R=0.2667 F1=0.0204
+[29/64] W=  50 theta_z= 3.5  TP= 12 FP=   245 FN= 33  P=0.0467 R=0.2667 F1=0.0795
+[30/64] W=  50 theta_z= 4.0  TP= 12 FP=    59 FN= 33  P=0.1690 R=0.2667 F1=0.2069
+[31/64] W=  50 theta_z= 4.5  TP= 12 FP=    14 FN= 33  P=0.4615 R=0.2667 F1=0.3380
+[32/64] W=  50 theta_z= 5.0  TP= 12 FP=     3 FN= 33  P=0.8000 R=0.2667 F1=0.4000
+[33/64] W=  75 theta_z= 1.5  TP= 30 FP= 34323 FN= 15  P=0.0009 R=0.6667 F1=0.0017
+[34/64] W=  75 theta_z= 2.0  TP= 13 FP= 14299 FN= 32  P=0.0009 R=0.2889 F1=0.0018
+[35/64] W=  75 theta_z= 2.5  TP= 13 FP=  4364 FN= 32  P=0.0030 R=0.2889 F1=0.0059
+[36/64] W=  75 theta_z= 3.0  TP= 12 FP=  1035 FN= 33  P=0.0115 R=0.2667 F1=0.0220
+[37/64] W=  75 theta_z= 3.5  TP= 12 FP=   210 FN= 33  P=0.0541 R=0.2667 F1=0.0899
+[38/64] W=  75 theta_z= 4.0  TP= 12 FP=    29 FN= 33  P=0.2927 R=0.2667 F1=0.2791
+[39/64] W=  75 theta_z= 4.5  TP= 12 FP=     7 FN= 33  P=0.6316 R=0.2667 F1=0.3750
+[40/64] W=  75 theta_z= 5.0  TP= 12 FP=     2 FN= 33  P=0.8571 R=0.2667 F1=0.4068
+[41/64] W= 100 theta_z= 1.5  TP= 30 FP= 38015 FN= 15  P=0.0008 R=0.6667 F1=0.0016
+[42/64] W= 100 theta_z= 2.0  TP= 19 FP= 15854 FN= 26  P=0.0012 R=0.4222 F1=0.0024
+[43/64] W= 100 theta_z= 2.5  TP= 12 FP=  4798 FN= 33  P=0.0025 R=0.2667 F1=0.0049
+[44/64] W= 100 theta_z= 3.0  TP= 12 FP=  1110 FN= 33  P=0.0107 R=0.2667 F1=0.0206
+[45/64] W= 100 theta_z= 3.5  TP= 12 FP=   223 FN= 33  P=0.0511 R=0.2667 F1=0.0857
+[46/64] W= 100 theta_z= 4.0  TP= 12 FP=    30 FN= 33  P=0.2857 R=0.2667 F1=0.2759
+[47/64] W= 100 theta_z= 4.5  TP= 12 FP=     7 FN= 33  P=0.6316 R=0.2667 F1=0.3750
+[48/64] W= 100 theta_z= 5.0  TP= 12 FP=     1 FN= 33  P=0.9231 R=0.2667 F1=0.4138
+[49/64] W= 150 theta_z= 1.5  TP= 30 FP= 39464 FN= 15  P=0.0008 R=0.6667 F1=0.0015
+[50/64] W= 150 theta_z= 2.0  TP= 23 FP= 17204 FN= 22  P=0.0013 R=0.5111 F1=0.0027
+[51/64] W= 150 theta_z= 2.5  TP= 13 FP=  5104 FN= 32  P=0.0025 R=0.2889 F1=0.0050
+[52/64] W= 150 theta_z= 3.0  TP= 12 FP=   998 FN= 33  P=0.0119 R=0.2667 F1=0.0227
+[53/64] W= 150 theta_z= 3.5  TP= 12 FP=   132 FN= 33  P=0.0833 R=0.2667 F1=0.1270
+[54/64] W= 150 theta_z= 4.0  TP= 12 FP=     6 FN= 33  P=0.6667 R=0.2667 F1=0.3810
+[55/64] W= 150 theta_z= 4.5  TP= 12 FP=     0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[56/64] W= 150 theta_z= 5.0  TP= 12 FP=     0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[57/64] W= 200 theta_z= 1.5  TP= 31 FP= 34380 FN= 14  P=0.0009 R=0.6889 F1=0.0018
+[58/64] W= 200 theta_z= 2.0  TP= 23 FP= 12857 FN= 22  P=0.0018 R=0.5111 F1=0.0036
+[59/64] W= 200 theta_z= 2.5  TP= 17 FP=  2673 FN= 28  P=0.0063 R=0.3778 F1=0.0124
+[60/64] W= 200 theta_z= 3.0  TP= 12 FP=   263 FN= 33  P=0.0436 R=0.2667 F1=0.0750
+[61/64] W= 200 theta_z= 3.5  TP= 12 FP=    13 FN= 33  P=0.4800 R=0.2667 F1=0.3429
+[62/64] W= 200 theta_z= 4.0  TP= 12 FP=     0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[63/64] W= 200 theta_z= 4.5  TP= 12 FP=     0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[64/64] W= 200 theta_z= 5.0  TP= 12 FP=     0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+
+=== Top 15 (W, theta_z) by F1 ===
+Rank     W  theta_z   TP      FP   FN    Prec  Recall      F1
+   1   150      4.5   12       0   33  1.0000  0.2667  0.4211
+   2   150      5.0   12       0   33  1.0000  0.2667  0.4211
+   3   200      4.0   12       0   33  1.0000  0.2667  0.4211
+   4   200      4.5   12       0   33  1.0000  0.2667  0.4211
+   5   200      5.0   12       0   33  1.0000  0.2667  0.4211
+   6   100      5.0   12       1   33  0.9231  0.2667  0.4138
+   7    75      5.0   12       2   33  0.8571  0.2667  0.4068
+   8    50      5.0   12       3   33  0.8000  0.2667  0.4000
+   9   150      4.0   12       6   33  0.6667  0.2667  0.3810
+  10    75      4.5   12       7   33  0.6316  0.2667  0.3750
+  11   100      4.5   12       7   33  0.6316  0.2667  0.3750
+  12    30      5.0   12      12   33  0.5000  0.2667  0.3478
+  13   200      3.5   12      13   33  0.4800  0.2667  0.3429
+  14    50      4.5   12      14   33  0.4615  0.2667  0.3380
+  15    75      4.0   12      29   33  0.2927  0.2667  0.2791
+
+64 combinations written to ../results/grid_sweep.csv
+### Table 4.2 -- theta_z x ceiling sweep (W=50)
+105122 entries, 105122 labels (45 anomalies)
+Baseline once at W=50, min_observations=10
+
+[1/63] theta_z= 2.0 ceiling=  80  TP= 28 FP=12319 FN= 17  P=0.0023 R=0.6222 F1=0.0045
+[2/63] theta_z= 2.0 ceiling=  82  TP= 28 FP=12309 FN= 17  P=0.0023 R=0.6222 F1=0.0045
+[3/63] theta_z= 2.0 ceiling=  85  TP= 28 FP=12296 FN= 17  P=0.0023 R=0.6222 F1=0.0045
+[4/63] theta_z= 2.0 ceiling=  88  TP= 15 FP=12296 FN= 30  P=0.0012 R=0.3333 F1=0.0024
+[5/63] theta_z= 2.0 ceiling=  90  TP= 14 FP=12296 FN= 31  P=0.0011 R=0.3111 F1=0.0023
+[6/63] theta_z= 2.0 ceiling=  95  TP= 14 FP=12296 FN= 31  P=0.0011 R=0.3111 F1=0.0023
+[7/63] theta_z= 2.0 ceiling=none  TP= 14 FP=12296 FN= 31  P=0.0011 R=0.3111 F1=0.0023
+[8/63] theta_z= 2.5 ceiling=  80  TP= 28 FP= 4195 FN= 17  P=0.0066 R=0.6222 F1=0.0131
+[9/63] theta_z= 2.5 ceiling=  82  TP= 28 FP= 4184 FN= 17  P=0.0066 R=0.6222 F1=0.0132
+[10/63] theta_z= 2.5 ceiling=  85  TP= 28 FP= 4170 FN= 17  P=0.0067 R=0.6222 F1=0.0132
+[11/63] theta_z= 2.5 ceiling=  88  TP= 15 FP= 4170 FN= 30  P=0.0036 R=0.3333 F1=0.0071
+[12/63] theta_z= 2.5 ceiling=  90  TP= 13 FP= 4170 FN= 32  P=0.0031 R=0.2889 F1=0.0061
+[13/63] theta_z= 2.5 ceiling=  95  TP= 13 FP= 4170 FN= 32  P=0.0031 R=0.2889 F1=0.0061
+[14/63] theta_z= 2.5 ceiling=none  TP= 13 FP= 4170 FN= 32  P=0.0031 R=0.2889 F1=0.0061
+[15/63] theta_z= 3.0 ceiling=  80  TP= 27 FP= 1147 FN= 18  P=0.0230 R=0.6000 F1=0.0443
+[16/63] theta_z= 3.0 ceiling=  82  TP= 27 FP= 1136 FN= 18  P=0.0232 R=0.6000 F1=0.0447
+[17/63] theta_z= 3.0 ceiling=  85  TP= 27 FP= 1122 FN= 18  P=0.0235 R=0.6000 F1=0.0452
+[18/63] theta_z= 3.0 ceiling=  88  TP= 14 FP= 1122 FN= 31  P=0.0123 R=0.3111 F1=0.0237
+[19/63] theta_z= 3.0 ceiling=  90  TP= 12 FP= 1122 FN= 33  P=0.0106 R=0.2667 F1=0.0204
+[20/63] theta_z= 3.0 ceiling=  95  TP= 12 FP= 1122 FN= 33  P=0.0106 R=0.2667 F1=0.0204
+[21/63] theta_z= 3.0 ceiling=none  TP= 12 FP= 1122 FN= 33  P=0.0106 R=0.2667 F1=0.0204
+[22/63] theta_z= 3.5 ceiling=  80  TP= 27 FP=  270 FN= 18  P=0.0909 R=0.6000 F1=0.1579
+[23/63] theta_z= 3.5 ceiling=  82  TP= 27 FP=  259 FN= 18  P=0.0944 R=0.6000 F1=0.1631
+[24/63] theta_z= 3.5 ceiling=  85  TP= 27 FP=  245 FN= 18  P=0.0993 R=0.6000 F1=0.1703
+[25/63] theta_z= 3.5 ceiling=  88  TP= 14 FP=  245 FN= 31  P=0.0541 R=0.3111 F1=0.0921
+[26/63] theta_z= 3.5 ceiling=  90  TP= 12 FP=  245 FN= 33  P=0.0467 R=0.2667 F1=0.0795
+[27/63] theta_z= 3.5 ceiling=  95  TP= 12 FP=  245 FN= 33  P=0.0467 R=0.2667 F1=0.0795
+[28/63] theta_z= 3.5 ceiling=none  TP= 12 FP=  245 FN= 33  P=0.0467 R=0.2667 F1=0.0795
+[29/63] theta_z= 4.0 ceiling=  80  TP= 27 FP=   84 FN= 18  P=0.2432 R=0.6000 F1=0.3462
+[30/63] theta_z= 4.0 ceiling=  82  TP= 27 FP=   73 FN= 18  P=0.2700 R=0.6000 F1=0.3724
+[31/63] theta_z= 4.0 ceiling=  85  TP= 27 FP=   59 FN= 18  P=0.3140 R=0.6000 F1=0.4122
+[32/63] theta_z= 4.0 ceiling=  88  TP= 14 FP=   59 FN= 31  P=0.1918 R=0.3111 F1=0.2373
+[33/63] theta_z= 4.0 ceiling=  90  TP= 12 FP=   59 FN= 33  P=0.1690 R=0.2667 F1=0.2069
+[34/63] theta_z= 4.0 ceiling=  95  TP= 12 FP=   59 FN= 33  P=0.1690 R=0.2667 F1=0.2069
+[35/63] theta_z= 4.0 ceiling=none  TP= 12 FP=   59 FN= 33  P=0.1690 R=0.2667 F1=0.2069
+[36/63] theta_z= 4.5 ceiling=  80  TP= 27 FP=   39 FN= 18  P=0.4091 R=0.6000 F1=0.4865
+[37/63] theta_z= 4.5 ceiling=  82  TP= 27 FP=   28 FN= 18  P=0.4909 R=0.6000 F1=0.5400
+[38/63] theta_z= 4.5 ceiling=  85  TP= 27 FP=   14 FN= 18  P=0.6585 R=0.6000 F1=0.6279
+[39/63] theta_z= 4.5 ceiling=  88  TP= 14 FP=   14 FN= 31  P=0.5000 R=0.3111 F1=0.3836
+[40/63] theta_z= 4.5 ceiling=  90  TP= 12 FP=   14 FN= 33  P=0.4615 R=0.2667 F1=0.3380
+[41/63] theta_z= 4.5 ceiling=  95  TP= 12 FP=   14 FN= 33  P=0.4615 R=0.2667 F1=0.3380
+[42/63] theta_z= 4.5 ceiling=none  TP= 12 FP=   14 FN= 33  P=0.4615 R=0.2667 F1=0.3380
+[43/63] theta_z= 5.0 ceiling=  80  TP= 27 FP=   28 FN= 18  P=0.4909 R=0.6000 F1=0.5400
+[44/63] theta_z= 5.0 ceiling=  82  TP= 27 FP=   17 FN= 18  P=0.6136 R=0.6000 F1=0.6067
+[45/63] theta_z= 5.0 ceiling=  85  TP= 27 FP=    3 FN= 18  P=0.9000 R=0.6000 F1=0.7200
+[46/63] theta_z= 5.0 ceiling=  88  TP= 14 FP=    3 FN= 31  P=0.8235 R=0.3111 F1=0.4516
+[47/63] theta_z= 5.0 ceiling=  90  TP= 12 FP=    3 FN= 33  P=0.8000 R=0.2667 F1=0.4000
+[48/63] theta_z= 5.0 ceiling=  95  TP= 12 FP=    3 FN= 33  P=0.8000 R=0.2667 F1=0.4000
+[49/63] theta_z= 5.0 ceiling=none  TP= 12 FP=    3 FN= 33  P=0.8000 R=0.2667 F1=0.4000
+[50/63] theta_z= 5.5 ceiling=  80  TP= 27 FP=   25 FN= 18  P=0.5192 R=0.6000 F1=0.5567
+[51/63] theta_z= 5.5 ceiling=  82  TP= 27 FP=   14 FN= 18  P=0.6585 R=0.6000 F1=0.6279
+[52/63] theta_z= 5.5 ceiling=  85  TP= 27 FP=    0 FN= 18  P=1.0000 R=0.6000 F1=0.7500
+[53/63] theta_z= 5.5 ceiling=  88  TP= 14 FP=    0 FN= 31  P=1.0000 R=0.3111 F1=0.4746
+[54/63] theta_z= 5.5 ceiling=  90  TP= 12 FP=    0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[55/63] theta_z= 5.5 ceiling=  95  TP= 12 FP=    0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[56/63] theta_z= 5.5 ceiling=none  TP= 12 FP=    0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[57/63] theta_z= 6.0 ceiling=  80  TP= 27 FP=   25 FN= 18  P=0.5192 R=0.6000 F1=0.5567
+[58/63] theta_z= 6.0 ceiling=  82  TP= 27 FP=   14 FN= 18  P=0.6585 R=0.6000 F1=0.6279
+[59/63] theta_z= 6.0 ceiling=  85  TP= 27 FP=    0 FN= 18  P=1.0000 R=0.6000 F1=0.7500
+[60/63] theta_z= 6.0 ceiling=  88  TP= 14 FP=    0 FN= 31  P=1.0000 R=0.3111 F1=0.4746
+[61/63] theta_z= 6.0 ceiling=  90  TP= 12 FP=    0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[62/63] theta_z= 6.0 ceiling=  95  TP= 12 FP=    0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+[63/63] theta_z= 6.0 ceiling=none  TP= 12 FP=    0 FN= 33  P=1.0000 R=0.2667 F1=0.4211
+
+=== Top 15 (theta_z, ceiling) by F1 ===
+Rank  theta_z  ceiling   TP     FP   FN    Prec  Recall      F1
+   1      5.5       85   27      0   18  1.0000  0.6000  0.7500
+   2      6.0       85   27      0   18  1.0000  0.6000  0.7500
+   3      5.0       85   27      3   18  0.9000  0.6000  0.7200
+   4      4.5       85   27     14   18  0.6585  0.6000  0.6279
+   5      5.5       82   27     14   18  0.6585  0.6000  0.6279
+   6      6.0       82   27     14   18  0.6585  0.6000  0.6279
+   7      5.0       82   27     17   18  0.6136  0.6000  0.6067
+   8      5.5       80   27     25   18  0.5192  0.6000  0.5567
+   9      6.0       80   27     25   18  0.5192  0.6000  0.5567
+  10      4.5       82   27     28   18  0.4909  0.6000  0.5400
+  11      5.0       80   27     28   18  0.4909  0.6000  0.5400
+  12      4.5       80   27     39   18  0.4091  0.6000  0.4865
+  13      5.5       88   14      0   31  1.0000  0.3111  0.4746
+  14      6.0       88   14      0   31  1.0000  0.3111  0.4746
+  15      5.0       88   14      3   31  0.8235  0.3111  0.4516
+
+Best: theta_z=5.5, ceiling=85 (F1=0.75, P=1.0, R=0.6, FP=0, FN=18)
+63 combinations written to ../results/ceiling_sweep.csv
+### 4.3 -- false-positive diagnosis at default theta_z=2.0
+=== False Positive Diagnostic Report ===
+
+Total false positives: 12297
+Total true positives:  26
+
+False positives occurring while baseline_ready == False: 0 / 12297 (0.0%)
+
+--- baseline_sigma distribution ---
+  All entries:
+    n      = 105122
+    min    = 0.000001
+    median = 2.997931
+    mean   = 3.065551
+    max    = 20.022858
+  False positives:
+    n      = 12297
+    min    = 1.331003
+    median = 2.998677
+    mean   = 3.004642
+    max    = 14.626589
+  True positives:
+    n      = 26
+    min    = 2.289824
+    median = 4.806782
+    mean   = 5.404551
+    max    = 9.668180
+
+--- Sample false positive records ---
+
+[1] {
+  "timestamp": "2024-01-01T04:57:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 41.4,
+  "process_id": 2048,
+  "raw": "Jan  1 04:57:05 combo diskmon[2048]: /dev/hda1 41.4% used",
+  "sequence_index": 11,
+  "baseline_mu": 37.654545454545456,
+  "baseline_sigma": 1.3310034740502674,
+  "baseline_ready": true,
+  "zscore": 2.8140080912464165,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.8140080912464165,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.8140080912464165,
+  "suppressed": false
+}
+
+[2] {
+  "timestamp": "2024-01-01T05:27:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 42.4,
+  "process_id": 2048,
+  "raw": "Jan  1 05:27:05 combo diskmon[2048]: /dev/hda1 42.4% used",
+  "sequence_index": 17,
+  "baseline_mu": 38.088235294117645,
+  "baseline_sigma": 1.6185986505911527,
+  "baseline_ready": true,
+  "zscore": 2.6638874957096927,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.6638874957096927,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.6638874957096927,
+  "suppressed": false
+}
+
+[3] {
+  "timestamp": "2024-01-01T06:42:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 34.6,
+  "process_id": 2048,
+  "raw": "Jan  1 06:42:05 combo diskmon[2048]: /dev/hda1 34.6% used",
+  "sequence_index": 32,
+  "baseline_mu": 39.028125,
+  "baseline_sigma": 2.0454575244612143,
+  "baseline_ready": true,
+  "zscore": -2.1648579582049234,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.1648579582049234,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": -2.1648579582049234,
+  "suppressed": false
+}
+
+[4] {
+  "timestamp": "2024-01-01T06:57:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 43.8,
+  "process_id": 2048,
+  "raw": "Jan  1 06:57:05 combo diskmon[2048]: /dev/hda1 43.8% used",
+  "sequence_index": 35,
+  "baseline_mu": 38.92857142857143,
+  "baseline_sigma": 2.096060444680711,
+  "baseline_ready": true,
+  "zscore": 2.3240878304779145,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.3240878304779145,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.3240878304779145,
+  "suppressed": false
+}
+
+[5] {
+  "timestamp": "2024-01-01T07:12:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 44.2,
+  "process_id": 2048,
+  "raw": "Jan  1 07:12:05 combo diskmon[2048]: /dev/hda1 44.2% used",
+  "sequence_index": 38,
+  "baseline_mu": 39.17368421052631,
+  "baseline_sigma": 2.2665397009685226,
+  "baseline_ready": true,
+  "zscore": 2.217616478249148,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.217616478249148,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.217616478249148,
+  "suppressed": false
+}
+
+[6] {
+  "timestamp": "2024-01-01T07:37:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 45.0,
+  "process_id": 2048,
+  "raw": "Jan  1 07:37:05 combo diskmon[2048]: /dev/hda1 45.0% used",
+  "sequence_index": 43,
+  "baseline_mu": 39.527906976744184,
+  "baseline_sigma": 2.3952788429601926,
+  "baseline_ready": true,
+  "zscore": 2.284532775521517,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.284532775521517,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.284532775521517,
+  "suppressed": false
+}
+
+[7] {
+  "timestamp": "2024-01-01T07:42:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 44.7,
+  "process_id": 2048,
+  "raw": "Jan  1 07:42:05 combo diskmon[2048]: /dev/hda1 44.7% used",
+  "sequence_index": 44,
+  "baseline_mu": 39.65227272727273,
+  "baseline_sigma": 2.5044041784935986,
+  "baseline_ready": true,
+  "zscore": 2.015540189588521,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.015540189588521,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.015540189588521,
+  "suppressed": false
+}
+
+[8] {
+  "timestamp": "2024-01-01T08:27:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 50.5,
+  "process_id": 2048,
+  "raw": "Jan  1 08:27:05 combo diskmon[2048]: /dev/hda1 50.5% used",
+  "sequence_index": 53,
+  "baseline_mu": 40.57,
+  "baseline_sigma": 2.8135564682444176,
+  "baseline_ready": true,
+  "zscore": 3.529340929203404,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 3.529340929203404,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 3.529340929203404,
+  "suppressed": false
+}
+
+[9] {
+  "timestamp": "2024-01-01T08:42:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 47.1,
+  "process_id": 2048,
+  "raw": "Jan  1 08:42:05 combo diskmon[2048]: /dev/hda1 47.1% used",
+  "sequence_index": 56,
+  "baseline_mu": 41.058,
+  "baseline_sigma": 2.964192301454142,
+  "baseline_ready": true,
+  "zscore": 2.038329293627806,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.038329293627806,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.038329293627806,
+  "suppressed": false
+}
+
+[10] {
+  "timestamp": "2024-01-01T08:47:05",
+  "log_source": "Linux_full",
+  "event_type": "Jan 1 <*> combo diskmon[2048]: /dev/hda1 <*> used",
+  "disk_usage_value": 48.9,
+  "process_id": 2048,
+  "raw": "Jan  1 08:47:05 combo diskmon[2048]: /dev/hda1 48.9% used",
+  "sequence_index": 57,
+  "baseline_mu": 41.224,
+  "baseline_sigma": 3.063825060280042,
+  "baseline_ready": true,
+  "zscore": 2.505364976451493,
+  "classification": "ABNORMAL",
+  "triggered_by": "zscore",
+  "severity_score": 2.505364976451493,
+  "priority": "MEDIUM",
+  "matched_keyword": null,
+  "enhanced_alert_score": 2.505364976451493,
+  "suppressed": false
+}
+
+=== Interpretation guide ===
+- If most false positives have baseline_ready == False and/or
+  a near-zero baseline_sigma, the fix is to either (a) skip
+  classification entirely until baseline_ready == True, or
+  (b) add an epsilon floor to sigma in the Z-Score denominator
+  (e.g. sigma = max(sigma, some_minimum_value)).
+- If false positive sigma values look similar to true positive
+  sigma values (no near-zero cluster), the issue is more likely
+  theta_z being too sensitive for this dataset's noise level,
+  and raising theta_z in config/settings.yaml would help.
+### 3.6.2 -- real-time replay (no lookahead)
+Replaying 105122 entries (speed_multiplier=1000000000.0, theta_z=5.5, ceiling=85.0) ...
+
+[2024-01-01 12:17:05] n=100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-01 20:37:05] n=200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-02 04:57:05] n=300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-02 13:17:05] n=400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-02 21:37:05] n=500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-03 05:57:05] n=600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-03 14:17:05] n=700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-03 22:37:05] n=800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-04 06:57:05] n=900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-04 15:17:05] n=1000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-04 23:37:05] n=1100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-05 07:57:05] n=1200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-05 16:17:05] n=1300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-06 00:37:05] n=1400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-06 08:57:05] n=1500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-06 17:17:05] n=1600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-07 01:37:05] n=1700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-07 09:57:05] n=1800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-07 18:17:05] n=1900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-08 02:37:05] n=2000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-08 10:57:05] n=2100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-08 19:17:05] n=2200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-09 03:37:05] n=2300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-09 11:57:05] n=2400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-09 20:17:05] n=2500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-10 04:37:05] n=2600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-10 12:57:05] n=2700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-10 21:17:05] n=2800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-11 05:37:05] n=2900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-11 13:57:05] n=3000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-11 22:17:05] n=3100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-12 06:37:05] n=3200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-12 14:57:05] n=3300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-12 23:17:05] n=3400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-13 07:37:05] n=3500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-13 15:57:05] n=3600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-14 00:17:05] n=3700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-14 08:37:05] n=3800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-14 16:57:05] n=3900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-15 01:17:05] n=4000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-15 09:37:05] n=4100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-15 17:57:05] n=4200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-16 02:17:05] n=4300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-16 10:37:05] n=4400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-16 18:57:05] n=4500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-17 03:17:05] n=4600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-17 11:37:05] n=4700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-17 19:57:05] n=4800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-18 04:17:05] n=4900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-18 12:37:05] n=5000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-18 20:57:05] n=5100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-19 05:17:05] n=5200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-19 13:37:05] n=5300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-19 21:57:05] n=5400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-20 06:17:05] n=5500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-20 14:37:05] n=5600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-20 22:57:05] n=5700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-21 07:17:05] n=5800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-21 15:37:05] n=5900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-21 23:57:05] n=6000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-22 08:17:05] n=6100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-22 16:37:05] n=6200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-23 00:57:05] n=6300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-23 09:17:05] n=6400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-23 17:37:05] n=6500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-24 01:57:05] n=6600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-24 10:17:05] n=6700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-24 18:37:05] n=6800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-25 02:57:05] n=6900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-25 11:17:05] n=7000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-25 19:37:05] n=7100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-26 03:57:05] n=7200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-26 12:17:05] n=7300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-26 20:37:05] n=7400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-27 04:57:05] n=7500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-27 13:17:05] n=7600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-27 21:37:05] n=7700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-28 05:57:05] n=7800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-28 14:17:05] n=7900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-28 22:37:05] n=8000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-29 06:57:05] n=8100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-29 15:17:05] n=8200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-29 23:37:05] n=8300 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-30 07:57:05] n=8400 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-30 16:17:05] n=8500 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-31 00:37:05] n=8600 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-31 08:57:05] n=8700 precision=0.000 recall=0.000 fpr=0.0000
+[2024-01-31 17:17:05] n=8800 precision=0.000 recall=0.000 fpr=0.0000
+[2024-02-01 01:37:05] n=8900 precision=0.000 recall=0.000 fpr=0.0000
+[2024-02-01 09:57:05] n=9000 precision=0.000 recall=0.000 fpr=0.0000
+[2024-02-01 18:17:05] n=9100 precision=0.000 recall=0.000 fpr=0.0000
+[2024-02-02 02:37:05] n=9200 precision=0.000 recall=0.000 fpr=0.0000
+[2024-02-02 10:57:05] n=9300 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-02 19:17:05] n=9400 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-03 03:37:05] n=9500 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-03 11:57:05] n=9600 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-03 20:17:05] n=9700 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-04 04:37:05] n=9800 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-04 12:57:05] n=9900 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-04 21:17:05] n=10000 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-05 05:37:05] n=10100 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-05 13:57:05] n=10200 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-05 22:17:05] n=10300 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-06 06:37:05] n=10400 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-06 14:57:05] n=10500 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-06 23:17:05] n=10600 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-07 07:37:05] n=10700 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-07 15:57:05] n=10800 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-08 00:17:05] n=10900 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-08 08:37:05] n=11000 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-08 16:57:05] n=11100 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-09 01:17:05] n=11200 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-09 09:37:05] n=11300 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-09 17:57:05] n=11400 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-10 02:17:05] n=11500 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-10 10:37:05] n=11600 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-10 18:57:05] n=11700 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-11 03:17:05] n=11800 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-11 11:37:05] n=11900 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-11 19:57:05] n=12000 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-12 04:17:05] n=12100 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-12 12:37:05] n=12200 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-12 20:57:05] n=12300 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-13 05:17:05] n=12400 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-13 13:37:05] n=12500 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-13 21:57:05] n=12600 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-14 06:17:05] n=12700 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-14 14:37:05] n=12800 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-14 22:57:05] n=12900 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-15 07:17:05] n=13000 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-15 15:37:05] n=13100 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-15 23:57:05] n=13200 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-16 08:17:05] n=13300 precision=1.000 recall=0.571 fpr=0.0000
+[2024-02-16 16:37:05] n=13400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-17 00:57:05] n=13500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-17 09:17:05] n=13600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-17 17:37:05] n=13700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-18 01:57:05] n=13800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-18 10:17:05] n=13900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-18 18:37:05] n=14000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-19 02:57:05] n=14100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-19 11:17:05] n=14200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-19 19:37:05] n=14300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-20 03:57:05] n=14400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-20 12:17:05] n=14500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-20 20:37:05] n=14600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-21 04:57:05] n=14700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-21 13:17:05] n=14800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-21 21:37:05] n=14900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-22 05:57:05] n=15000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-22 14:17:05] n=15100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-22 22:37:05] n=15200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-23 06:57:05] n=15300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-23 15:17:05] n=15400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-23 23:37:05] n=15500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-24 07:57:05] n=15600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-24 16:17:05] n=15700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-25 00:37:05] n=15800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-25 08:57:05] n=15900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-25 17:17:05] n=16000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-26 01:37:05] n=16100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-26 09:57:05] n=16200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-26 18:17:05] n=16300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-27 02:37:05] n=16400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-27 10:57:05] n=16500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-27 19:17:05] n=16600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-28 03:37:05] n=16700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-28 11:57:05] n=16800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-28 20:17:05] n=16900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-29 04:37:05] n=17000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-29 12:57:05] n=17100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-02-29 21:17:05] n=17200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-01 05:37:05] n=17300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-01 13:57:05] n=17400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-01 22:17:05] n=17500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-02 06:37:05] n=17600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-02 14:57:05] n=17700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-02 23:17:05] n=17800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-03 07:37:05] n=17900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-03 15:57:05] n=18000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-04 00:17:05] n=18100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-04 08:37:05] n=18200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-04 16:57:05] n=18300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-05 01:17:05] n=18400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-05 09:37:05] n=18500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-05 17:57:05] n=18600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-06 02:17:05] n=18700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-06 10:37:05] n=18800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-06 18:57:05] n=18900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-07 03:17:05] n=19000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-07 11:37:05] n=19100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-07 19:57:05] n=19200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-08 04:17:05] n=19300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-08 12:37:05] n=19400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-08 20:57:05] n=19500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-09 05:17:05] n=19600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-09 13:37:05] n=19700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-09 21:57:05] n=19800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-10 06:17:05] n=19900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-10 14:37:05] n=20000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-10 22:57:05] n=20100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-11 07:17:05] n=20200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-11 15:37:05] n=20300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-11 23:57:05] n=20400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-12 08:17:05] n=20500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-12 16:37:05] n=20600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-13 00:57:05] n=20700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-13 09:17:05] n=20800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-13 17:37:05] n=20900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-14 01:57:05] n=21000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-14 10:17:05] n=21100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-14 18:37:05] n=21200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-15 02:57:05] n=21300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-15 11:17:05] n=21400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-15 19:37:05] n=21500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-16 03:57:05] n=21600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-16 12:17:05] n=21700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-16 20:37:05] n=21800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-17 04:57:05] n=21900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-17 13:17:05] n=22000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-17 21:37:05] n=22100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-18 05:57:05] n=22200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-18 14:17:05] n=22300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-18 22:37:05] n=22400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-19 06:57:05] n=22500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-19 15:17:05] n=22600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-19 23:37:05] n=22700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-20 07:57:05] n=22800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-20 16:17:05] n=22900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-21 00:37:05] n=23000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-21 08:57:05] n=23100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-21 17:17:05] n=23200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-22 01:37:05] n=23300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-22 09:57:05] n=23400 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-22 18:17:05] n=23500 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-23 02:37:05] n=23600 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-23 10:57:05] n=23700 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-23 19:17:05] n=23800 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-24 03:37:05] n=23900 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-24 11:57:05] n=24000 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-24 20:17:05] n=24100 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-25 04:37:05] n=24200 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-25 12:57:05] n=24300 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-25 21:17:05] n=24400 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-26 05:37:05] n=24500 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-26 13:57:05] n=24600 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-26 22:17:05] n=24700 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-27 06:37:05] n=24800 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-27 14:57:05] n=24900 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-27 23:17:05] n=25000 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-28 07:37:05] n=25100 precision=1.000 recall=0.727 fpr=0.0000
+[2024-03-28 15:57:05] n=25200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-03-29 00:17:05] n=25300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-29 08:37:05] n=25400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-29 16:57:05] n=25500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-30 01:17:05] n=25600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-30 09:37:05] n=25700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-30 17:57:05] n=25800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-03-31 02:17:05] n=25900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-03-31 10:37:05] n=26000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-03-31 18:57:05] n=26100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-01 03:17:05] n=26200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-01 11:37:05] n=26300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-01 19:57:05] n=26400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-02 04:17:05] n=26500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-02 12:37:05] n=26600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-02 20:57:05] n=26700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-03 05:17:05] n=26800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-03 13:37:05] n=26900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-03 21:57:05] n=27000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-04 06:17:05] n=27100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-04 14:37:05] n=27200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-04 22:57:05] n=27300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-05 07:17:05] n=27400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-05 15:37:05] n=27500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-05 23:57:05] n=27600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-06 08:17:05] n=27700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-06 16:37:05] n=27800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-07 00:57:05] n=27900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-07 09:17:05] n=28000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-07 17:37:05] n=28100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-08 01:57:05] n=28200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-08 10:17:05] n=28300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-08 18:37:05] n=28400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-09 02:57:05] n=28500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-09 11:17:05] n=28600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-09 19:37:05] n=28700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-10 03:57:05] n=28800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-10 12:17:05] n=28900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-10 20:37:05] n=29000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-11 04:57:05] n=29100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-11 13:17:05] n=29200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-11 21:37:05] n=29300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-12 05:57:05] n=29400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-12 14:17:05] n=29500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-12 22:37:05] n=29600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-13 06:57:05] n=29700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-13 15:17:05] n=29800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-13 23:37:05] n=29900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-14 07:57:05] n=30000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-14 16:17:05] n=30100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-15 00:37:05] n=30200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-15 08:57:05] n=30300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-15 17:17:05] n=30400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-16 01:37:05] n=30500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-16 09:57:05] n=30600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-16 18:17:05] n=30700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-17 02:37:05] n=30800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-17 10:57:05] n=30900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-17 19:17:05] n=31000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-18 03:37:05] n=31100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-18 11:57:05] n=31200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-18 20:17:05] n=31300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-19 04:37:05] n=31400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-19 12:57:05] n=31500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-19 21:17:05] n=31600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-20 05:37:05] n=31700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-20 13:57:05] n=31800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-20 22:17:05] n=31900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-21 06:37:05] n=32000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-21 14:57:05] n=32100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-21 23:17:05] n=32200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-22 07:37:05] n=32300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-22 15:57:05] n=32400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-23 00:17:05] n=32500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-23 08:37:05] n=32600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-23 16:57:05] n=32700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-24 01:17:05] n=32800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-24 09:37:05] n=32900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-24 17:57:05] n=33000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-25 02:17:05] n=33100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-25 10:37:05] n=33200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-25 18:57:05] n=33300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-26 03:17:05] n=33400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-26 11:37:05] n=33500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-26 19:57:05] n=33600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-27 04:17:05] n=33700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-27 12:37:05] n=33800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-27 20:57:05] n=33900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-28 05:17:05] n=34000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-28 13:37:05] n=34100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-28 21:57:05] n=34200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-29 06:17:05] n=34300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-29 14:37:05] n=34400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-29 22:57:05] n=34500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-30 07:17:05] n=34600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-30 15:37:05] n=34700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-04-30 23:57:05] n=34800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-01 08:17:05] n=34900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-01 16:37:05] n=35000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-02 00:57:05] n=35100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-02 09:17:05] n=35200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-02 17:37:05] n=35300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-03 01:57:05] n=35400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-03 10:17:05] n=35500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-03 18:37:05] n=35600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-04 02:57:05] n=35700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-04 11:17:05] n=35800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-04 19:37:05] n=35900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-05 03:57:05] n=36000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-05 12:17:05] n=36100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-05 20:37:05] n=36200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-06 04:57:05] n=36300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-06 13:17:05] n=36400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-06 21:37:05] n=36500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-07 05:57:05] n=36600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-07 14:17:05] n=36700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-07 22:37:05] n=36800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-08 06:57:05] n=36900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-08 15:17:05] n=37000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-08 23:37:05] n=37100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-09 07:57:05] n=37200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-09 16:17:05] n=37300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-10 00:37:05] n=37400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-10 08:57:05] n=37500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-10 17:17:05] n=37600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-11 01:37:05] n=37700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-11 09:57:05] n=37800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-11 18:17:05] n=37900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-12 02:37:05] n=38000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-12 10:57:05] n=38100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-12 19:17:05] n=38200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-13 03:37:05] n=38300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-13 11:57:05] n=38400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-13 20:17:05] n=38500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-14 04:37:05] n=38600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-14 12:57:05] n=38700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-14 21:17:05] n=38800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-15 05:37:05] n=38900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-15 13:57:05] n=39000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-15 22:17:05] n=39100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-16 06:37:05] n=39200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-16 14:57:05] n=39300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-16 23:17:05] n=39400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-17 07:37:05] n=39500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-17 15:57:05] n=39600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-18 00:17:05] n=39700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-18 08:37:05] n=39800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-18 16:57:05] n=39900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-19 01:17:05] n=40000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-19 09:37:05] n=40100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-19 17:57:05] n=40200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-20 02:17:05] n=40300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-20 10:37:05] n=40400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-20 18:57:05] n=40500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-21 03:17:05] n=40600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-21 11:37:05] n=40700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-21 19:57:05] n=40800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-22 04:17:05] n=40900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-22 12:37:05] n=41000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-22 20:57:05] n=41100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-23 05:17:05] n=41200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-23 13:37:05] n=41300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-23 21:57:05] n=41400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-24 06:17:05] n=41500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-24 14:37:05] n=41600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-24 22:57:05] n=41700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-25 07:17:05] n=41800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-25 15:37:05] n=41900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-25 23:57:05] n=42000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-26 08:17:05] n=42100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-26 16:37:05] n=42200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-27 00:57:05] n=42300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-27 09:17:05] n=42400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-27 17:37:05] n=42500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-28 01:57:05] n=42600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-28 10:17:05] n=42700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-28 18:37:05] n=42800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-29 02:57:05] n=42900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-29 11:17:05] n=43000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-29 19:37:05] n=43100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-30 03:57:05] n=43200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-30 12:17:05] n=43300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-30 20:37:05] n=43400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-31 04:57:05] n=43500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-31 13:17:05] n=43600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-05-31 21:37:05] n=43700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-01 05:57:05] n=43800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-01 14:17:05] n=43900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-01 22:37:05] n=44000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-02 06:57:05] n=44100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-02 15:17:05] n=44200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-02 23:37:05] n=44300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-03 07:57:05] n=44400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-03 16:17:05] n=44500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-04 00:37:05] n=44600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-04 08:57:05] n=44700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-04 17:17:05] n=44800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-05 01:37:05] n=44900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-05 09:57:05] n=45000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-05 18:17:05] n=45100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-06 02:37:05] n=45200 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-06 10:57:05] n=45300 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-06 19:17:05] n=45400 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-07 03:37:05] n=45500 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-07 11:57:05] n=45600 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-07 20:17:05] n=45700 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-08 04:37:05] n=45800 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-08 12:57:05] n=45900 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-08 21:17:05] n=46000 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-09 05:37:05] n=46100 precision=1.000 recall=0.706 fpr=0.0000
+[2024-06-09 13:57:05] n=46200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-09 22:17:05] n=46300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-10 06:37:05] n=46400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-10 14:57:05] n=46500 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-10 23:17:05] n=46600 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-11 07:37:05] n=46700 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-11 15:57:05] n=46800 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-12 00:17:05] n=46900 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-12 08:37:05] n=47000 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-12 16:57:05] n=47100 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-13 01:17:05] n=47200 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-13 09:37:05] n=47300 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-13 17:57:05] n=47400 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-14 02:17:05] n=47500 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-14 10:37:05] n=47600 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-14 18:57:05] n=47700 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-15 03:17:05] n=47800 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-15 11:37:05] n=47900 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-15 19:57:05] n=48000 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-16 04:17:05] n=48100 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-16 12:37:05] n=48200 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-16 20:57:05] n=48300 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-17 05:17:05] n=48400 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-17 13:37:05] n=48500 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-17 21:57:05] n=48600 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-18 06:17:05] n=48700 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-18 14:37:05] n=48800 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-18 22:57:05] n=48900 precision=1.000 recall=0.632 fpr=0.0000
+[2024-06-19 07:17:05] n=49000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-19 15:37:05] n=49100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-19 23:57:05] n=49200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-20 08:17:05] n=49300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-20 16:37:05] n=49400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-21 00:57:05] n=49500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-21 09:17:05] n=49600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-21 17:37:05] n=49700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-22 01:57:05] n=49800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-22 10:17:05] n=49900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-22 18:37:05] n=50000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-23 02:57:05] n=50100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-23 11:17:05] n=50200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-23 19:37:05] n=50300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-24 03:57:05] n=50400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-24 12:17:05] n=50500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-24 20:37:05] n=50600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-25 04:57:05] n=50700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-25 13:17:05] n=50800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-25 21:37:05] n=50900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-26 05:57:05] n=51000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-26 14:17:05] n=51100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-26 22:37:05] n=51200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-27 06:57:05] n=51300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-27 15:17:05] n=51400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-27 23:37:05] n=51500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-28 07:57:05] n=51600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-28 16:17:05] n=51700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-29 00:37:05] n=51800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-29 08:57:05] n=51900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-29 17:17:05] n=52000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-30 01:37:05] n=52100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-30 09:57:05] n=52200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-06-30 18:17:05] n=52300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-01 02:37:05] n=52400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-01 10:57:05] n=52500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-01 19:17:05] n=52600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-02 03:37:05] n=52700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-02 11:57:05] n=52800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-02 20:17:05] n=52900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-03 04:37:05] n=53000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-03 12:57:05] n=53100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-03 21:17:05] n=53200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-04 05:37:05] n=53300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-04 13:57:05] n=53400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-04 22:17:05] n=53500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-05 06:37:05] n=53600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-05 14:57:05] n=53700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-05 23:17:05] n=53800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-06 07:37:05] n=53900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-06 15:57:05] n=54000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-07 00:17:05] n=54100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-07 08:37:05] n=54200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-07 16:57:05] n=54300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-08 01:17:05] n=54400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-08 09:37:05] n=54500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-08 17:57:05] n=54600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-09 02:17:05] n=54700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-09 10:37:05] n=54800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-09 18:57:05] n=54900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-10 03:17:05] n=55000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-10 11:37:05] n=55100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-10 19:57:05] n=55200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-11 04:17:05] n=55300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-11 12:37:05] n=55400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-11 20:57:05] n=55500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-12 05:17:05] n=55600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-12 13:37:05] n=55700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-12 21:57:05] n=55800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-13 06:17:05] n=55900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-13 14:37:05] n=56000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-13 22:57:05] n=56100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-14 07:17:05] n=56200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-14 15:37:05] n=56300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-14 23:57:05] n=56400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-15 08:17:05] n=56500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-15 16:37:05] n=56600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-16 00:57:05] n=56700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-16 09:17:05] n=56800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-16 17:37:05] n=56900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-17 01:57:05] n=57000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-17 10:17:05] n=57100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-17 18:37:05] n=57200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-18 02:57:05] n=57300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-18 11:17:05] n=57400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-18 19:37:05] n=57500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-19 03:57:05] n=57600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-19 12:17:05] n=57700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-19 20:37:05] n=57800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-20 04:57:05] n=57900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-20 13:17:05] n=58000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-20 21:37:05] n=58100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-21 05:57:05] n=58200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-21 14:17:05] n=58300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-21 22:37:05] n=58400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-22 06:57:05] n=58500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-22 15:17:05] n=58600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-22 23:37:05] n=58700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-23 07:57:05] n=58800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-23 16:17:05] n=58900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-24 00:37:05] n=59000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-24 08:57:05] n=59100 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-24 17:17:05] n=59200 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-25 01:37:05] n=59300 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-25 09:57:05] n=59400 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-25 18:17:05] n=59500 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-26 02:37:05] n=59600 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-26 10:57:05] n=59700 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-26 19:17:05] n=59800 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-27 03:37:05] n=59900 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-27 11:57:05] n=60000 precision=1.000 recall=0.696 fpr=0.0000
+[2024-07-27 20:17:05] n=60100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-28 04:37:05] n=60200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-28 12:57:05] n=60300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-28 21:17:05] n=60400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-29 05:37:05] n=60500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-29 13:57:05] n=60600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-29 22:17:05] n=60700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-30 06:37:05] n=60800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-30 14:57:05] n=60900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-30 23:17:05] n=61000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-31 07:37:05] n=61100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-07-31 15:57:05] n=61200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-01 00:17:05] n=61300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-01 08:37:05] n=61400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-01 16:57:05] n=61500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-02 01:17:05] n=61600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-02 09:37:05] n=61700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-02 17:57:05] n=61800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-03 02:17:05] n=61900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-03 10:37:05] n=62000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-03 18:57:05] n=62100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-04 03:17:05] n=62200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-04 11:37:05] n=62300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-04 19:57:05] n=62400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-05 04:17:05] n=62500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-05 12:37:05] n=62600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-05 20:57:05] n=62700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-06 05:17:05] n=62800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-06 13:37:05] n=62900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-06 21:57:05] n=63000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-07 06:17:05] n=63100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-07 14:37:05] n=63200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-07 22:57:05] n=63300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-08 07:17:05] n=63400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-08 15:37:05] n=63500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-08 23:57:05] n=63600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-09 08:17:05] n=63700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-09 16:37:05] n=63800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-10 00:57:05] n=63900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-10 09:17:05] n=64000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-10 17:37:05] n=64100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-11 01:57:05] n=64200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-11 10:17:05] n=64300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-11 18:37:05] n=64400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-12 02:57:05] n=64500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-12 11:17:05] n=64600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-12 19:37:05] n=64700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-13 03:57:05] n=64800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-13 12:17:05] n=64900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-13 20:37:05] n=65000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-14 04:57:05] n=65100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-14 13:17:05] n=65200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-14 21:37:05] n=65300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-15 05:57:05] n=65400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-15 14:17:05] n=65500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-15 22:37:05] n=65600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-16 06:57:05] n=65700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-16 15:17:05] n=65800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-16 23:37:05] n=65900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-17 07:57:05] n=66000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-17 16:17:05] n=66100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-18 00:37:05] n=66200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-18 08:57:05] n=66300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-18 17:17:05] n=66400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-19 01:37:05] n=66500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-19 09:57:05] n=66600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-19 18:17:05] n=66700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-20 02:37:05] n=66800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-20 10:57:05] n=66900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-20 19:17:05] n=67000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-21 03:37:05] n=67100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-21 11:57:05] n=67200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-21 20:17:05] n=67300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-22 04:37:05] n=67400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-22 12:57:05] n=67500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-22 21:17:05] n=67600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-23 05:37:05] n=67700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-23 13:57:05] n=67800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-23 22:17:05] n=67900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-24 06:37:05] n=68000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-24 14:57:05] n=68100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-24 23:17:05] n=68200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-25 07:37:05] n=68300 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-25 15:57:05] n=68400 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-26 00:17:05] n=68500 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-26 08:37:05] n=68600 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-26 16:57:05] n=68700 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-27 01:17:05] n=68800 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-27 09:37:05] n=68900 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-27 17:57:05] n=69000 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-28 02:17:05] n=69100 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-28 10:37:05] n=69200 precision=1.000 recall=0.667 fpr=0.0000
+[2024-08-28 18:57:05] n=69300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-29 03:17:05] n=69400 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-29 11:37:05] n=69500 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-29 19:57:05] n=69600 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-30 04:17:05] n=69700 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-30 12:37:05] n=69800 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-30 20:57:05] n=69900 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-31 05:17:05] n=70000 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-31 13:37:05] n=70100 precision=1.000 recall=0.615 fpr=0.0000
+[2024-08-31 21:57:05] n=70200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-01 06:17:05] n=70300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-01 14:37:05] n=70400 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-01 22:57:05] n=70500 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-02 07:17:05] n=70600 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-02 15:37:05] n=70700 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-02 23:57:05] n=70800 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-03 08:17:05] n=70900 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-03 16:37:05] n=71000 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-04 00:57:05] n=71100 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-04 09:17:05] n=71200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-04 17:37:05] n=71300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-05 01:57:05] n=71400 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-05 10:17:05] n=71500 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-05 18:37:05] n=71600 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-06 02:57:05] n=71700 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-06 11:17:05] n=71800 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-06 19:37:05] n=71900 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-07 03:57:05] n=72000 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-07 12:17:05] n=72100 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-07 20:37:05] n=72200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-08 04:57:05] n=72300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-08 13:17:05] n=72400 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-08 21:37:05] n=72500 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-09 05:57:05] n=72600 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-09 14:17:05] n=72700 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-09 22:37:05] n=72800 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-10 06:57:05] n=72900 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-10 15:17:05] n=73000 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-10 23:37:05] n=73100 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-11 07:57:05] n=73200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-11 16:17:05] n=73300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-12 00:37:05] n=73400 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-12 08:57:05] n=73500 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-12 17:17:05] n=73600 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-13 01:37:05] n=73700 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-13 09:57:05] n=73800 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-13 18:17:05] n=73900 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-14 02:37:05] n=74000 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-14 10:57:05] n=74100 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-14 19:17:05] n=74200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-15 03:37:05] n=74300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-15 11:57:05] n=74400 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-15 20:17:05] n=74500 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-16 04:37:05] n=74600 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-16 12:57:05] n=74700 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-16 21:17:05] n=74800 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-17 05:37:05] n=74900 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-17 13:57:05] n=75000 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-17 22:17:05] n=75100 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-18 06:37:05] n=75200 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-18 14:57:05] n=75300 precision=1.000 recall=0.615 fpr=0.0000
+[2024-09-18 23:17:05] n=75400 precision=1.000 recall=0.571 fpr=0.0000
+[2024-09-19 07:37:05] n=75500 precision=1.000 recall=0.552 fpr=0.0000
+[2024-09-19 15:57:05] n=75600 precision=1.000 recall=0.552 fpr=0.0000
+[2024-09-20 00:17:05] n=75700 precision=1.000 recall=0.552 fpr=0.0000
+[2024-09-20 08:37:05] n=75800 precision=1.000 recall=0.552 fpr=0.0000
+[2024-09-20 16:57:05] n=75900 precision=1.000 recall=0.552 fpr=0.0000
+[2024-09-21 01:17:05] n=76000 precision=1.000 recall=0.629 fpr=0.0000
+[2024-09-21 09:37:05] n=76100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-21 17:57:05] n=76200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-22 02:17:05] n=76300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-22 10:37:05] n=76400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-22 18:57:05] n=76500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-23 03:17:05] n=76600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-23 11:37:05] n=76700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-23 19:57:05] n=76800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-24 04:17:05] n=76900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-24 12:37:05] n=77000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-24 20:57:05] n=77100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-25 05:17:05] n=77200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-25 13:37:05] n=77300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-25 21:57:05] n=77400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-26 06:17:05] n=77500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-26 14:37:05] n=77600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-26 22:57:05] n=77700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-27 07:17:05] n=77800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-27 15:37:05] n=77900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-27 23:57:05] n=78000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-28 08:17:05] n=78100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-28 16:37:05] n=78200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-29 00:57:05] n=78300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-29 09:17:05] n=78400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-29 17:37:05] n=78500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-30 01:57:05] n=78600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-30 10:17:05] n=78700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-09-30 18:37:05] n=78800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-01 02:57:05] n=78900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-01 11:17:05] n=79000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-01 19:37:05] n=79100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-02 03:57:05] n=79200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-02 12:17:05] n=79300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-02 20:37:05] n=79400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-03 04:57:05] n=79500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-03 13:17:05] n=79600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-03 21:37:05] n=79700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-04 05:57:05] n=79800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-04 14:17:05] n=79900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-04 22:37:05] n=80000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-05 06:57:05] n=80100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-05 15:17:05] n=80200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-05 23:37:05] n=80300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-06 07:57:05] n=80400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-06 16:17:05] n=80500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-07 00:37:05] n=80600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-07 08:57:05] n=80700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-07 17:17:05] n=80800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-08 01:37:05] n=80900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-08 09:57:05] n=81000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-08 18:17:05] n=81100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-09 02:37:05] n=81200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-09 10:57:05] n=81300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-09 19:17:05] n=81400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-10 03:37:05] n=81500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-10 11:57:05] n=81600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-10 20:17:05] n=81700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-11 04:37:05] n=81800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-11 12:57:05] n=81900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-11 21:17:05] n=82000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-12 05:37:05] n=82100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-12 13:57:05] n=82200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-12 22:17:05] n=82300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-13 06:37:05] n=82400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-13 14:57:05] n=82500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-13 23:17:05] n=82600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-14 07:37:05] n=82700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-14 15:57:05] n=82800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-15 00:17:05] n=82900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-15 08:37:05] n=83000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-15 16:57:05] n=83100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-16 01:17:05] n=83200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-16 09:37:05] n=83300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-16 17:57:05] n=83400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-17 02:17:05] n=83500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-17 10:37:05] n=83600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-17 18:57:05] n=83700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-18 03:17:05] n=83800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-18 11:37:05] n=83900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-18 19:57:05] n=84000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-19 04:17:05] n=84100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-19 12:37:05] n=84200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-19 20:57:05] n=84300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-20 05:17:05] n=84400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-20 13:37:05] n=84500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-20 21:57:05] n=84600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-21 06:17:05] n=84700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-21 14:37:05] n=84800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-21 22:57:05] n=84900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-22 07:17:05] n=85000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-22 15:37:05] n=85100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-22 23:57:05] n=85200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-23 08:17:05] n=85300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-23 16:37:05] n=85400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-24 00:57:05] n=85500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-24 09:17:05] n=85600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-24 17:37:05] n=85700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-25 01:57:05] n=85800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-25 10:17:05] n=85900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-25 18:37:05] n=86000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-26 02:57:05] n=86100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-26 11:17:05] n=86200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-26 19:37:05] n=86300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-27 03:57:05] n=86400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-27 12:17:05] n=86500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-27 20:37:05] n=86600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-28 04:57:05] n=86700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-28 13:17:05] n=86800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-28 21:37:05] n=86900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-29 05:57:05] n=87000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-29 14:17:05] n=87100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-29 22:37:05] n=87200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-30 06:57:05] n=87300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-30 15:17:05] n=87400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-30 23:37:05] n=87500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-31 07:57:05] n=87600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-10-31 16:17:05] n=87700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-01 00:37:05] n=87800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-01 08:57:05] n=87900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-01 17:17:05] n=88000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-02 01:37:05] n=88100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-02 09:57:05] n=88200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-02 18:17:05] n=88300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-03 02:37:05] n=88400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-03 10:57:05] n=88500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-03 19:17:05] n=88600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-04 03:37:05] n=88700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-04 11:57:05] n=88800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-04 20:17:05] n=88900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-05 04:37:05] n=89000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-05 12:57:05] n=89100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-05 21:17:05] n=89200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-06 05:37:05] n=89300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-06 13:57:05] n=89400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-06 22:17:05] n=89500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-07 06:37:05] n=89600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-07 14:57:05] n=89700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-07 23:17:05] n=89800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-08 07:37:05] n=89900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-08 15:57:05] n=90000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-09 00:17:05] n=90100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-09 08:37:05] n=90200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-09 16:57:05] n=90300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-10 01:17:05] n=90400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-10 09:37:05] n=90500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-10 17:57:05] n=90600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-11 02:17:05] n=90700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-11 10:37:05] n=90800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-11 18:57:05] n=90900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-12 03:17:05] n=91000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-12 11:37:05] n=91100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-12 19:57:05] n=91200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-13 04:17:05] n=91300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-13 12:37:05] n=91400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-13 20:57:05] n=91500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-14 05:17:05] n=91600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-14 13:37:05] n=91700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-14 21:57:05] n=91800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-15 06:17:05] n=91900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-15 14:37:05] n=92000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-15 22:57:05] n=92100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-16 07:17:05] n=92200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-16 15:37:05] n=92300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-16 23:57:05] n=92400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-17 08:17:05] n=92500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-17 16:37:05] n=92600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-18 00:57:05] n=92700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-18 09:17:05] n=92800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-18 17:37:05] n=92900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-19 01:57:05] n=93000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-19 10:17:05] n=93100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-19 18:37:05] n=93200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-20 02:57:05] n=93300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-20 11:17:05] n=93400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-20 19:37:05] n=93500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-21 03:57:05] n=93600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-21 12:17:05] n=93700 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-21 20:37:05] n=93800 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-22 04:57:05] n=93900 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-22 13:17:05] n=94000 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-22 21:37:05] n=94100 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-23 05:57:05] n=94200 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-23 14:17:05] n=94300 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-23 22:37:05] n=94400 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-24 06:57:05] n=94500 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-24 15:17:05] n=94600 precision=1.000 recall=0.675 fpr=0.0000
+[2024-11-24 23:37:05] n=94700 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-25 07:57:05] n=94800 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-25 16:17:05] n=94900 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-26 00:37:05] n=95000 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-26 08:57:05] n=95100 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-26 17:17:05] n=95200 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-27 01:37:05] n=95300 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-27 09:57:05] n=95400 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-27 18:17:05] n=95500 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-28 02:37:05] n=95600 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-28 10:57:05] n=95700 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-28 19:17:05] n=95800 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-29 03:37:05] n=95900 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-29 11:57:05] n=96000 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-29 20:17:05] n=96100 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-30 04:37:05] n=96200 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-30 12:57:05] n=96300 precision=1.000 recall=0.643 fpr=0.0000
+[2024-11-30 21:17:05] n=96400 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-01 05:37:05] n=96500 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-01 13:57:05] n=96600 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-01 22:17:05] n=96700 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-02 06:37:05] n=96800 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-02 14:57:05] n=96900 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-02 23:17:05] n=97000 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-03 07:37:05] n=97100 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-03 15:57:05] n=97200 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-04 00:17:05] n=97300 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-04 08:37:05] n=97400 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-04 16:57:05] n=97500 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-05 01:17:05] n=97600 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-05 09:37:05] n=97700 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-05 17:57:05] n=97800 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-06 02:17:05] n=97900 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-06 10:37:05] n=98000 precision=1.000 recall=0.643 fpr=0.0000
+[2024-12-06 18:57:05] n=98100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-07 03:17:05] n=98200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-07 11:37:05] n=98300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-07 19:57:05] n=98400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-08 04:17:05] n=98500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-08 12:37:05] n=98600 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-08 20:57:05] n=98700 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-09 05:17:05] n=98800 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-09 13:37:05] n=98900 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-09 21:57:05] n=99000 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-10 06:17:05] n=99100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-10 14:37:05] n=99200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-10 22:57:05] n=99300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-11 07:17:05] n=99400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-11 15:37:05] n=99500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-11 23:57:05] n=99600 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-12 08:17:05] n=99700 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-12 16:37:05] n=99800 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-13 00:57:05] n=99900 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-13 09:17:05] n=100000 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-13 17:37:05] n=100100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-14 01:57:05] n=100200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-14 10:17:05] n=100300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-14 18:37:05] n=100400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-15 02:57:05] n=100500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-15 11:17:05] n=100600 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-15 19:37:05] n=100700 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-16 03:57:05] n=100800 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-16 12:17:05] n=100900 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-16 20:37:05] n=101000 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-17 04:57:05] n=101100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-17 13:17:05] n=101200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-17 21:37:05] n=101300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-18 05:57:05] n=101400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-18 14:17:05] n=101500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-18 22:37:05] n=101600 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-19 06:57:05] n=101700 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-19 15:17:05] n=101800 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-19 23:37:05] n=101900 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-20 07:57:05] n=102000 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-20 16:17:05] n=102100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-21 00:37:05] n=102200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-21 08:57:05] n=102300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-21 17:17:05] n=102400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-22 01:37:05] n=102500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-22 09:57:05] n=102600 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-22 18:17:05] n=102700 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-23 02:37:05] n=102800 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-23 10:57:05] n=102900 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-23 19:17:05] n=103000 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-24 03:37:05] n=103100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-24 11:57:05] n=103200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-24 20:17:05] n=103300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-25 04:37:05] n=103400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-25 12:57:05] n=103500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-25 21:17:05] n=103600 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-26 05:37:05] n=103700 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-26 13:57:05] n=103800 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-26 22:17:05] n=103900 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-27 06:37:05] n=104000 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-27 14:57:05] n=104100 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-27 23:17:05] n=104200 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-28 07:37:05] n=104300 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-28 15:57:05] n=104400 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-29 00:17:05] n=104500 precision=1.000 recall=0.628 fpr=0.0000
+[2024-12-29 08:37:05] n=104600 precision=1.000 recall=0.600 fpr=0.0000
+[2024-12-29 16:57:05] n=104700 precision=1.000 recall=0.600 fpr=0.0000
+[2024-12-30 01:17:05] n=104800 precision=1.000 recall=0.600 fpr=0.0000
+[2024-12-30 09:37:05] n=104900 precision=1.000 recall=0.600 fpr=0.0000
+[2024-12-30 17:57:05] n=105000 precision=1.000 recall=0.600 fpr=0.0000
+[2024-12-31 02:17:05] n=105100 precision=1.000 recall=0.600 fpr=0.0000
+
+=== Final Real-Time Evaluation Summary ===
+TP=27 FP=0 FN=18 TN=105067
+Precision: 1.0000
+Recall:    0.6000
+FPR:       0.0000
+Rolling metrics saved to /home/coco/thesis/results/rolling_metrics_history.csv
+### Tables 4.1-4.3 regenerated + checked against the paper
+105122 readings | 105122 labels (45 anomalies) | W=50 | context=all log lines
+
+Table 4.1  Z-Score Threshold Sensitivity Sweep (W = 50, no ceiling)
+ theta_z    TP      FP   FN  Precision  Recall      F1  vs paper
+     1.5    29   28558   16     0.0010  0.6444  0.0020  DIFF (paper TP/FP/FN=(43, 34390, 2))
+     2.0    14   12296   31     0.0011  0.3111  0.0023  DIFF (paper TP/FP/FN=(35, 12862, 10))
+     2.5    13    4170   32     0.0031  0.2889  0.0061  DIFF (paper TP/FP/FN=(29, 2675, 16))
+     3.0    12    1122   33     0.0106  0.2667  0.0204  DIFF (paper TP/FP/FN=(24, 263, 21))
+     3.5    12     245   33     0.0467  0.2667  0.0795  DIFF (paper TP/FP/FN=(24, 13, 21))
+     4.0    12      59   33     0.1690  0.2667  0.2069  DIFF (paper TP/FP/FN=(24, 0, 21))
+  STATIC    39      25    6     0.6094  0.8667  0.7156  OK
+
+Table 4.2  Joint theta_z x theta_ceiling Sweep (W = 50)
+ theta_z  ceiling    TP    FP   FN  Precision  Recall      F1  vs paper
+     4.0      85%    27    59   18     0.3140  0.6000  0.4122  OK
+     4.5      85%    27    14   18     0.6585  0.6000  0.6279  OK
+     5.0      85%    27     3   18     0.9000  0.6000  0.7200  OK
+     5.5      85%    27     0   18     1.0000  0.6000  0.7500  OK
+     6.0      85%    27     0   18     1.0000  0.6000  0.7500  OK
+     5.0      90%    12     3   33     0.8000  0.2667  0.4000  OK
+     5.0     none    12     3   33     0.8000  0.2667  0.4000  OK
+  STATIC      80%    39    25    6     0.6094  0.8667  0.7156
+
+Table 4.3  Final Comparative Performance: Static Threshold vs. Enhanced Algorithm
+Metric              Static (80%)    Enhanced     Delta
+True Positives                39          27       -12
+False Positives               25           0       -25
+False Negatives                6          18       +12
+Precision                 0.6094      1.0000   +0.3906
+Recall                    0.8667      0.6000   -0.2667
+F1-Score                  0.7156      0.7500   +0.0344
+
+vs paper: OK / static OK
+
+Written to /home/coco/thesis/results/tables/ (table_4_1.csv, table_4_2.csv, table_4_3.csv, tables.md)
+### Supporting evidence for Sections 4.1-4.8
+
+==============================================================================
+A. DATASET FACTS (Section 4.1)
+==============================================================================
+Readings                : 105122
+First / last            : 2024-01-01 04:02:05 -> 2024-12-31 04:07:05
+Span                    : 365.0 days   (paper says 260 in Ch.4, 263 in Ch.5)
+Median sampling gap     : 5.0 min
+Implied span @ this many readings & 5-min sampling: 365.0 days
+Disk usage median / p95 : 45.0% / 54.6%   (paper: 45.0% / 54.6%)
+Min / max               : 26.6% / 100.2%
+
+==============================================================================
+B. GROUND-TRUTH BREAKDOWN (Section 4.2)
+==============================================================================
+Labeled readings        : 105122
+True anomalies          : 45 (0.043%)   (paper: 45, 0.04%)
+  by keyword           : 6
+  by threshold         : 39
+  (paper: 39 by threshold + 6 by keyword)
+
+==============================================================================
+C. OBJECTIVE 1 -- STATIC 80% THRESHOLD ERRORS (Section 4.3)
+==============================================================================
+Static false positives  : 25  (paper: 25)
+  with a benign keyword in +/-60s  : 0
+  with a failure keyword in +/-60s : 0   (paper claims none)
+  with no keyword either way       : 25
+  FP usage range                   : 80.5% - 84.7%
+Static false negatives  : 6  (paper: 6)
+  2024-01-26 12:22:05  49.3%  nearby keyword: disk quota
+  2024-06-09 06:07:05  38.3%  nearby keyword: disk quota
+  2024-06-10 11:32:05  50.8%  nearby keyword: disk quota
+  2024-07-27 14:42:05  54.7%  nearby keyword: disk quota
+  2024-09-19 05:57:05  44.2%  nearby keyword: disk quota
+  2024-12-06 12:22:05  54.9%  nearby keyword: disk quota
+
+==============================================================================
+D. RECALL-GAP DIAGNOSIS at theta_z=4.0, no ceiling (Section 4.4)
+==============================================================================
+False negatives at theta_z=4.0: 33  (paper: 21)
+Matching 'gradual climb' heuristic (rise>=8 pts in <=12h from 60-80%): 0 / 33   (paper: 19 / 21)
+
+First 8 false negatives (timestamp, value, mu, sigma, Z):
+  2024-01-26 12:22:05  x=49.3  mu=47.6  sigma=3.65  Z=0.46
+  2024-01-27 20:17:05  x=97.7  mu=49.4  sigma=3.63  Z=13.32
+  2024-01-27 20:22:05  x=96.8  mu=50.3  sigma=7.67  Z=6.07
+  2024-02-02 10:12:05  x=85.2  mu=68.4  sigma=9.77  Z=1.72
+  2024-02-02 10:17:05  x=85.2  mu=69.0  sigma=9.75  Z=1.66
+  2024-02-02 10:22:05  x=89.3  mu=69.7  sigma=9.67  Z=2.03
+  2024-02-02 10:27:05  x=87.2  mu=70.4  sigma=9.81  Z=1.71
+  2024-03-28 14:47:05  x=98.4  mu=52.3  sigma=2.92  Z=15.79
+
+==============================================================================
+E. RESIDUAL ERRORS OF THE FINAL CONFIGURATION (Section 4.6)
+==============================================================================
+False negatives at final config: 18  (paper: 18)
+  suppressed as benign by correlation       : 12
+  usage 80-84.9%, never flagged             : 0
+  usage <80%, never flagged                 : 6
+  usage >=85% but not flagged               : 0
+  (paper attributes the misses to gradual climbs plateauing at 80-84%)
+
+==============================================================================
+F. CONTEXTUAL CORRELATION AUDIT (Section 4.8)
+==============================================================================
+ABNORMAL before suppression      : 39
+  of which true anomalies        : 39
+  priority HIGH / MEDIUM / LOW   : 12 / 15 / 12
+Delivered alerts (non-suppressed): 27
+True anomalies SUPPRESSED        : 12   <-- these count as FALSE NEGATIVES in all tables
+True anomalies escalated HIGH    : 12
+  Paper Sec. 4.8 says 12 suppressed + 12 HIGH 'among the 27 correctly detected true positives'.
+  Suppressed alerts are not delivered, so they cannot also be true positives -- reconcile before defending.
+
+Ranked alert list length         : 27
+Position of first non-HIGH alert : 13  (HIGH alerts occupy positions 1..12)
+Top 10:
+   1. [HIGH  ] score=31.71 z=21.14 disk=100.2% true=True @ 2024-06-19 06:57:05
+   2. [HIGH  ] score=28.11 z=18.74 disk=92.2% true=True @ 2024-07-03 02:07:05
+   3. [HIGH  ] score=22.52 z=15.01 disk=92.3% true=True @ 2024-03-22 09:22:05
+   4. [HIGH  ] score=21.06 z=14.04 disk=91.3% true=True @ 2024-02-16 09:47:05
+   5. [HIGH  ] score=20.00 z=13.33 disk=90.4% true=True @ 2024-03-31 01:12:05
+   6. [HIGH  ] score=19.71 z=13.14 disk=92.1% true=True @ 2024-03-28 23:22:05
+   7. [HIGH  ] score=9.88 z=6.59 disk=92.5% true=True @ 2024-07-03 02:12:05
+   8. [HIGH  ] score=9.68 z=6.45 disk=92.8% true=True @ 2024-02-16 09:52:05
+   9. [HIGH  ] score=9.66 z=6.44 disk=93.2% true=True @ 2024-03-22 09:27:05
+  10. [HIGH  ] score=9.60 z=6.40 disk=98.1% true=True @ 2024-06-19 07:02:05
+
+==============================================================================
+G. STATISTICAL CONFIDENCE (bootstrap, 5000 resamples)
+==============================================================================
+Metric               Static 95% CI       Enhanced 95% CI
+Precision           [0.484, 0.732]        [1.000, 1.000]
+Recall              [0.756, 0.958]        [0.447, 0.744]
+F1                  [0.608, 0.808]        [0.618, 0.853]
+
+Paired F1 difference (Enhanced - Static): mean +0.033, 95% CI [-0.095, 0.164]
+Share of resamples where Enhanced F1 > Static F1: 69.2%
+Interpretation: if the CI of the F1 difference spans 0, the F1 gain is not statistically
+distinguishable on this sample; the precision/FP-elimination gain is the robust claim.
+
+==============================================================================
+H. RUNTIME: +/-dt WINDOW vs FULL-CORPUS MATCHING (Problem 4)
+==============================================================================
+Corpus size (log lines)          : 129043
+Flagged readings sampled         : 200 of 12323 (at theta_z=2.0)
+Windowed (+/-60s, bisect) per alert : 0.006 ms
+Full-corpus scan per alert          : 37.829 ms
+Speed-up                            : 6044x
+All done. CSVs in results/, audit trail in logs/.

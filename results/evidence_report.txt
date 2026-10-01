@@ -1,0 +1,110 @@
+
+==============================================================================
+A. DATASET FACTS (Section 4.1)
+==============================================================================
+Readings                : 105122
+First / last            : 2024-01-01 04:02:05 -> 2024-12-31 04:07:05
+Span                    : 365.0 days   (paper says 260 in Ch.4, 263 in Ch.5)
+Median sampling gap     : 5.0 min
+Implied span @ this many readings & 5-min sampling: 365.0 days
+Disk usage median / p95 : 45.0% / 54.6%   (paper: 45.0% / 54.6%)
+Min / max               : 26.6% / 100.2%
+
+==============================================================================
+B. GROUND-TRUTH BREAKDOWN (Section 4.2)
+==============================================================================
+Labeled readings        : 105122
+True anomalies          : 45 (0.043%)   (paper: 45, 0.04%)
+  by keyword           : 6
+  by threshold         : 39
+  (paper: 39 by threshold + 6 by keyword)
+
+==============================================================================
+C. OBJECTIVE 1 -- STATIC 80% THRESHOLD ERRORS (Section 4.3)
+==============================================================================
+Static false positives  : 25  (paper: 25)
+  with a benign keyword in +/-60s  : 0
+  with a failure keyword in +/-60s : 0   (paper claims none)
+  with no keyword either way       : 25
+  FP usage range                   : 80.5% - 84.7%
+Static false negatives  : 6  (paper: 6)
+  2024-01-26 12:22:05  49.3%  nearby keyword: disk quota
+  2024-06-09 06:07:05  38.3%  nearby keyword: disk quota
+  2024-06-10 11:32:05  50.8%  nearby keyword: disk quota
+  2024-07-27 14:42:05  54.7%  nearby keyword: disk quota
+  2024-09-19 05:57:05  44.2%  nearby keyword: disk quota
+  2024-12-06 12:22:05  54.9%  nearby keyword: disk quota
+
+==============================================================================
+D. RECALL-GAP DIAGNOSIS at theta_z=4.0, no ceiling (Section 4.4)
+==============================================================================
+False negatives at theta_z=4.0: 33  (paper: 21)
+Matching 'gradual climb' heuristic (rise>=8 pts in <=12h from 60-80%): 0 / 33   (paper: 19 / 21)
+
+First 8 false negatives (timestamp, value, mu, sigma, Z):
+  2024-01-26 12:22:05  x=49.3  mu=47.6  sigma=3.65  Z=0.46
+  2024-01-27 20:17:05  x=97.7  mu=49.4  sigma=3.63  Z=13.32
+  2024-01-27 20:22:05  x=96.8  mu=50.3  sigma=7.67  Z=6.07
+  2024-02-02 10:12:05  x=85.2  mu=68.4  sigma=9.77  Z=1.72
+  2024-02-02 10:17:05  x=85.2  mu=69.0  sigma=9.75  Z=1.66
+  2024-02-02 10:22:05  x=89.3  mu=69.7  sigma=9.67  Z=2.03
+  2024-02-02 10:27:05  x=87.2  mu=70.4  sigma=9.81  Z=1.71
+  2024-03-28 14:47:05  x=98.4  mu=52.3  sigma=2.92  Z=15.79
+
+==============================================================================
+E. RESIDUAL ERRORS OF THE FINAL CONFIGURATION (Section 4.6)
+==============================================================================
+False negatives at final config: 18  (paper: 18)
+  suppressed as benign by correlation       : 12
+  usage 80-84.9%, never flagged             : 0
+  usage <80%, never flagged                 : 6
+  usage >=85% but not flagged               : 0
+  (paper attributes the misses to gradual climbs plateauing at 80-84%)
+
+==============================================================================
+F. CONTEXTUAL CORRELATION AUDIT (Section 4.8)
+==============================================================================
+ABNORMAL before suppression      : 39
+  of which true anomalies        : 39
+  priority HIGH / MEDIUM / LOW   : 12 / 15 / 12
+Delivered alerts (non-suppressed): 27
+True anomalies SUPPRESSED        : 12   <-- these count as FALSE NEGATIVES in all tables
+True anomalies escalated HIGH    : 12
+  Paper Sec. 4.8 says 12 suppressed + 12 HIGH 'among the 27 correctly detected true positives'.
+  Suppressed alerts are not delivered, so they cannot also be true positives -- reconcile before defending.
+
+Ranked alert list length         : 27
+Position of first non-HIGH alert : 13  (HIGH alerts occupy positions 1..12)
+Top 10:
+   1. [HIGH  ] score=31.71 z=21.14 disk=100.2% true=True @ 2024-06-19 06:57:05
+   2. [HIGH  ] score=28.11 z=18.74 disk=92.2% true=True @ 2024-07-03 02:07:05
+   3. [HIGH  ] score=22.52 z=15.01 disk=92.3% true=True @ 2024-03-22 09:22:05
+   4. [HIGH  ] score=21.06 z=14.04 disk=91.3% true=True @ 2024-02-16 09:47:05
+   5. [HIGH  ] score=20.00 z=13.33 disk=90.4% true=True @ 2024-03-31 01:12:05
+   6. [HIGH  ] score=19.71 z=13.14 disk=92.1% true=True @ 2024-03-28 23:22:05
+   7. [HIGH  ] score=9.88 z=6.59 disk=92.5% true=True @ 2024-07-03 02:12:05
+   8. [HIGH  ] score=9.68 z=6.45 disk=92.8% true=True @ 2024-02-16 09:52:05
+   9. [HIGH  ] score=9.66 z=6.44 disk=93.2% true=True @ 2024-03-22 09:27:05
+  10. [HIGH  ] score=9.60 z=6.40 disk=98.1% true=True @ 2024-06-19 07:02:05
+
+==============================================================================
+G. STATISTICAL CONFIDENCE (bootstrap, 5000 resamples)
+==============================================================================
+Metric               Static 95% CI       Enhanced 95% CI
+Precision           [0.484, 0.732]        [1.000, 1.000]
+Recall              [0.756, 0.958]        [0.447, 0.744]
+F1                  [0.608, 0.808]        [0.618, 0.853]
+
+Paired F1 difference (Enhanced - Static): mean +0.033, 95% CI [-0.095, 0.164]
+Share of resamples where Enhanced F1 > Static F1: 69.2%
+Interpretation: if the CI of the F1 difference spans 0, the F1 gain is not statistically
+distinguishable on this sample; the precision/FP-elimination gain is the robust claim.
+
+==============================================================================
+H. RUNTIME: +/-dt WINDOW vs FULL-CORPUS MATCHING (Problem 4)
+==============================================================================
+Corpus size (log lines)          : 129043
+Flagged readings sampled         : 200 of 12323 (at theta_z=2.0)
+Windowed (+/-60s, bisect) per alert : 0.006 ms
+Full-corpus scan per alert          : 37.829 ms
+Speed-up                            : 6044x

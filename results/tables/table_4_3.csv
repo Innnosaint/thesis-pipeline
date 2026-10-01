@@ -1,0 +1,7 @@
+Metric,Static Threshold (80%),Enhanced (theta_z=5.5, ceiling=85%),Delta,vs paper
+True Positives,39,27,-12,OK / static OK
+False Positives,25,0,-25,
+False Negatives,6,18,+12,
+Precision,0.6094,1.0000,+0.3906,
+Recall,0.8667,0.6000,-0.2667,
+F1-Score,0.7156,0.7500,+0.0344,
