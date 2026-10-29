@@ -1,3 +1,5 @@
+> **Rebuilt PLM defense dashboard:** Start with [`DEFENSE_QUICK_START.md`](DEFENSE_QUICK_START.md). The Streamlit interface has a clean navy theme and uses the official PLM logo supplied by the researchers. The academic hero banner appears **only on Overview**; the other pages use compact page headings. Use `UI_PREVIEW.html` for an offline, nonfunctional layout preview. The dataset upload and original algorithm pipeline remain available.
+
 # Enhanced Threshold-Based Alert Algorithm — Pipeline
 
 Implementation of the disk usage anomaly detection pipeline described in
@@ -106,3 +108,18 @@ plt.title("Rolling Detection Performance Over Real-Time Replay")
 plt.xlabel("Entries Processed")
 plt.savefig("results/rolling_performance.png")
 ```
+
+## Graphical dashboard (Windows/macOS/Linux)
+
+Install Python 3.10+ and run `pip install -r requirements.txt` followed by
+`streamlit run dashboard.py`. On Windows, double-click `START_DASHBOARD.bat`.
+The UI opens in your browser (usually http://localhost:8501).
+
+- Upload .log/.txt syslog files, or a CSV with `timestamp,disk_usage_value,message`.
+- Optionally upload labels (.jsonl/.csv with `timestamp,is_anomaly`) for evaluation.
+- Use the included Linux sample if you do not yet have your own dataset.
+- Adjust window, theta, safety ceiling, debounce, correlation window.
+- Browse real ranked alerts, charts, audit trail and downloadable results.
+- Runs are isolated under `runs/<run-id>/` so existing files remain intact.
+
+Use **Dataset Laboratory** for input examples, **Methodology** for the processing stages, and **Research Evaluation** for the documented benchmark and new experiment metrics. The HTML preview is not connected to the backend.

@@ -1,5 +1,20 @@
+# Python
 venv/
-data/raw/*.log
-data/processed/
+.venv/
 __pycache__/
 *.pyc
+
+# Windows metadata
+*:Zone.Identifier
+
+# Generated experimental data
+runs/
+logs/
+results/
+
+# Local backups
+backup/
+
+# Environment secrets
+.env
+.env.*
