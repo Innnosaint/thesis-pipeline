@@ -18,3 +18,17 @@ backup/
 # Environment secrets
 .env
 .env.*
+# Local downloaded datasets
+data/external/
+
+# Generated processing outputs
+data/processed/
+
+# Backup files
+*.bak
+
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.pyc
