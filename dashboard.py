@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard_engine import ROOT, load_run, parse_upload, run_dataset
+from experiment_tables import TABLE_DESCRIPTIONS, generate_experiment_tables, load_table_csv
 
 ASSETS = ROOT / "assets"
 THESIS = ASSETS / "Thesis_Research_Document.pdf"
@@ -165,16 +166,6 @@ def chart_style(fig, height=330, show_legend=True):
     return fig
 
 
-def research_comparison():
-    """Direct transcription of Chapter 4, Table 4.4 of the supplied thesis PDF."""
-    return pd.DataFrame([
-        {'Method':'Static 80%', 'Precision':0.6094,'Recall':0.8667,'F1':0.7156,'TP':39,'FP':25,'FN':6},
-        {'Method':'Static 85%', 'Precision':1.0000,'Recall':0.8667,'F1':0.9286,'TP':39,'FP':0,'FN':6},
-        {'Method':'Enhanced (suppression on)', 'Precision':1.0000,'Recall':0.6000,'F1':0.7500,'TP':27,'FP':0,'FN':18},
-        {'Method':'Hybrid (priority only)', 'Precision':1.0000,'Recall':0.8667,'F1':0.9286,'TP':39,'FP':0,'FN':6},
-    ])
-
-
 def comparison_chart(data, cols=('Precision','Recall','F1')):
     color_map={'Precision':'#52D6BC','Recall':'#75B9EE','F1':'#D8B475'}
     fig=go.Figure()
@@ -202,7 +193,7 @@ st.sidebar.markdown(
 nav_groups = [
     ('WORKSPACE', ['Overview', 'Thesis Information', 'Dataset Laboratory']),
     ('MONITORING', ['Monitoring Overview', 'Alert Intelligence']),
-    ('RESEARCH', ['Methodology', 'Research Evaluation']),
+    ('RESEARCH', ['Methodology', 'Experiment Tables', 'Research Evaluation']),
     ('SYSTEM', ['Settings']),
 ]
 for group_title, links in nav_groups:
@@ -342,23 +333,27 @@ if page in ('Overview', 'Monitoring Overview'):
         with right:
             st.markdown('### Alert priority distribution')
             empty('Awaiting detector output','Priorities will appear after contextual correlation and alert scoring.')
-        st.markdown('### Verified thesis results (Chapter 4)')
-        tiles([
-            ('Observations','105,122','Controlled research benchmark','#50b3ee'),
-            ('Enhanced precision','100.0%','Suppression on','#46ca9a'),
-            ('Enhanced recall','60.0%','Suppression on','#e6b64e'),
-            ('Enhanced F1','75.0%','Suppression on','#ed6179'),
-        ])
-        st.markdown('<div class="info-strip">The four research benchmark figures above come from the uploaded thesis. They are historical controlled-experiment findings, not current server usage or results from a new dataset. Use Research Evaluation for the full comparison.</div>',unsafe_allow_html=True)
+        st.info('No results are displayed until you upload a dataset and execute an experiment. Thesis manuscript values are not inserted as test results.')
 
 elif page=='Dataset Laboratory':
     section('02 / Experimental workspace','Dataset laboratory',
             'Run the original pipeline on your own logs or the provided research samples. Every experiment is stored separately.')
     with st.container(border=True):
         st.markdown('### 1. Select a data source')
-        choice=st.radio('Source',['Example CSV dataset','Included full Linux log','Upload custom dataset'],horizontal=True)
+        choice=st.radio('Source',['Upload custom dataset','Example CSV dataset','Included full Linux log'],horizontal=True)
         datasets=[]
-        if choice=='Example CSV dataset':
+        if choice=='Upload custom dataset':
+            ups=st.file_uploader('Upload LOG, TXT or disk usage CSV files',type=['log','txt','csv'],accept_multiple_files=True,
+                help='Choose your own prepared dataset. For CSV use timestamp,disk_usage_value and optional message columns.')
+            if ups:
+                for f in ups:
+                    try:
+                        source=f.getvalue()
+                        text_lines=parse_upload(f.name,source)
+                        datasets.append((f.name,source))
+                        st.success(f'{f.name} · {len(text_lines.splitlines()):,} input lines accepted')
+                    except ValueError as exc: st.error(f'{f.name}: {exc}')
+        elif choice=='Example CSV dataset':
             f=ROOT/'data/examples/demo_disk_usage.csv'
             if f.exists():
                 datasets=[(f.name,f.read_bytes())]
@@ -371,17 +366,6 @@ elif page=='Dataset Laboratory':
                 st.info(f'Full benchmark input selected: {f.name} ({f.stat().st_size/(1024*1024):.1f} MB).')
                 datasets=[(f.name,f.read_bytes())]
             else: st.error('Included Linux log file not found.')
-        else:
-            ups=st.file_uploader('Upload log, text, or disk usage CSV files',type=['log','txt','csv'],accept_multiple_files=True,
-                help='For CSV use timestamp,disk_usage_value and optional message columns.')
-            if ups:
-                for f in ups:
-                    try:
-                        source=f.getvalue()
-                        text_lines=parse_upload(f.name,source)
-                        datasets.append((f.name,source))
-                        st.success(f'{f.name} · {len(text_lines.splitlines()):,} valid input lines')
-                    except ValueError as exc: st.error(f'{f.name}: {exc}')
         st.divider()
         st.markdown('### 2. Optional ground-truth evaluation')
         demo_labels=False
@@ -391,6 +375,10 @@ elif page=='Dataset Laboratory':
             help='Optional. Must contain timestamp and is_anomaly. This is required for precision, recall and F1.')
         labels_data=labels_file.getvalue() if labels_file else None
         labels_name=labels_file.name if labels_file else ''
+        label_provenance=st.selectbox('How were the reference labels created?',[
+            'Independently reviewed labels', 'Synthetic injection labels',
+            'Rule/threshold-derived labels', 'Not specified'],index=1 if demo_labels else 3,
+            help='This is recorded in the experiment manifest. Synthetic or threshold-derived labels do not establish real-world generalization.')
         if not labels_data and demo_labels:
             lab=ROOT/'data/examples/demo_labels.csv'
             labels_data=lab.read_bytes()
@@ -402,9 +390,9 @@ elif page=='Dataset Laboratory':
         if st.button('Run detection analysis',type='primary',use_container_width=True,disabled=not datasets):
             try:
                 with st.spinner('Processing logs through parsing, baseline calculation, classification, correlation and scoring...'):
-                    run_folder,result=run_dataset(datasets,labels_data,labels_name,window,min_obs,theta,ceiling,debounce,delta,suppress_benign)
+                    run_folder,result=run_dataset(datasets,labels_data,labels_name,window,min_obs,theta,ceiling,debounce,delta,suppress_benign,label_provenance)
                     st.session_state['run_folder']=str(run_folder)
-                st.success(f'Experiment completed · {result["readings"]:,} disk observations · {result["alerts"]:,} delivered alerts. Select Overview, Alert Intelligence, or Research Evaluation.')
+                st.success(f'Experiment completed · {result["readings"]:,} disk observations · {result["alerts"]:,} delivered alerts. Open Experiment Tables to run the five chapter-style tests.')
             except Exception as exc:
                 st.error(f'Pipeline execution failed: {exc}')
     section('Saved work','Experiment history','Open an earlier run without overwriting your original thesis benchmark or the current configuration.')
@@ -470,33 +458,19 @@ elif page=='Alert Intelligence':
         st.caption('Suppressed readings remain available in the audit trail. Enhanced alert scores are assigned by the original algorithm, not generated for display.')
 
 elif page=='Research Evaluation':
-    section('04 / Research evidence','Algorithm performance evaluation',
-            'Separate the documented thesis benchmark from new experiment metrics for an accurate defense presentation.')
-    st.markdown('<span class="research-label">Chapter 4 / Table 4.4 / Thesis benchmark</span>',unsafe_allow_html=True)
-    research=research_comparison()
-    tiles([
-        ('Enhanced precision','100.0%','With benign suppression','#52D6BC'),
-        ('Enhanced recall','60.0%','27 true positives, 18 missed','#75B9EE'),
-        ('Enhanced F1','75.0%','Suppression-enabled setting','#D8B475'),
-        ('Priority-only F1','92.9%','Post-hoc hybrid ablation','#D6869E'),
-    ])
-    st.markdown('### Published comparison from the supplied thesis')
-    comparison_chart(research)
-    pretty=research.copy()
-    for col in ['Precision','Recall','F1']:pretty[col]=pretty[col].map(lambda v:f'{v:.2%}')
-    st.dataframe(pretty,hide_index=True,use_container_width=True)
-    st.markdown('<div class="info-strip"><b>Interpretation:</b> The suppression-enabled approach reduced false positives compared with the 80% rule but missed some labeled anomalies after contextual suppression. The priority-only hybrid matched a static 85% rule on this benchmark. The 85% value was also used to define labels, so these results do not demonstrate generalization to unseen production data. These findings are transcribed from the uploaded thesis, not recalculated by the dashboard.</div>',unsafe_allow_html=True)
-    st.divider()
-    st.markdown('### Current experiment performance')
+    section('04 / Your experiment','Algorithm performance evaluation',
+        'Only the selected experiment is evaluated here. Accuracy metrics require uploaded ground-truth labels.')
     if summary and summary.get('metrics') is not None:
         m=summary['metrics']
         st.markdown(f'<span class="run-pill">RUN {esc(summary["run_id"])}</span>',unsafe_allow_html=True)
-        if m['matched'] == 0:st.error('No ground-truth timestamps matched baseline-ready readings. Do not interpret the following zero scores as valid accuracy measurements.')
+        st.caption(f'Source: {", ".join(summary["uploaded_files"])}  |  Labels: {summary.get("labels_filename") or "None"}  |  Provenance: {summary.get("label_provenance", "Not specified")}')
+        if m['matched']==0:
+            st.error('No uploaded label timestamps matched baseline-ready observations. Metrics cannot be interpreted.')
         else:
             tiles([
-                ('Precision',f'{m["precision"]:.1%}',f'{m["tp"]} true-positive alerts','#52D6BC'),
+                ('Precision',f'{m["precision"]:.1%}',f'{m["tp"]} true positives','#52D6BC'),
                 ('Recall',f'{m["recall"]:.1%}',f'{m["fn"]} false negatives','#75B9EE'),
-                ('F1 score',f'{m["f1"]:.1%}','Balance of precision and recall','#D8B475'),
+                ('F1 score',f'{m["f1"]:.1%}','From current experiment','#D8B475'),
                 ('False-positive rate',f'{m["fpr"]:.3%}',f'{m["fp"]} false positives','#D6869E'),
             ])
             c1,c2=st.columns([1,1],gap='large')
@@ -507,16 +481,97 @@ elif page=='Research Evaluation':
                     text=z,texttemplate='%{text:,}',colorscale=[[0,'#153349'],[1,'#42BDAA']],showscale=False))
                 chart_style(fig,290,False);st.plotly_chart(fig,use_container_width=True,config={'displayModeBar':False})
             with c2:
-                st.markdown('#### Baseline method comparison')
+                st.markdown('#### Static vs. enhanced (current settings)')
                 variants=[('Enhanced (current)',m),('Static 80%',summary.get('static_80_metrics')),('Static 85%',summary.get('static_85_metrics'))]
                 vals=[{'Method':name,'Precision':mm['precision'],'Recall':mm['recall'],'F1':mm['f1']} for name,mm in variants if mm]
                 if vals:comparison_chart(pd.DataFrame(vals))
-            st.caption(f'Matched {m["matched"]:,} baseline-ready timestamps of {m["labels_count"]:,} labeled timestamps; repeated timestamps are evaluated once. Method comparisons here use the same matched labels and warm-up eligibility.')
-        st.download_button('Download this run’s evaluation',json.dumps(m,indent=2),file_name='experiment_evaluation.json',mime='application/json')
+            st.caption(f'{m["matched"]:,} timestamps matched out of {m["labels_count"]:,} labels; the warm-up interval is excluded from scoring.')
+            if m['matched']<m['labels_count']:
+                st.warning('Some labels did not match eligible readings. Check timestamps and baseline warm-up before interpreting metrics.')
+            if 'Synthetic' in summary.get('label_provenance','') or 'Rule/threshold' in summary.get('label_provenance',''):
+                st.warning('These labels are not independently verified production incidents. Report synthetic/threshold-label limitations during your defense.')
+        st.download_button('Export this experiment’s metrics',json.dumps(m,indent=2),file_name='current_evaluation.json',mime='application/json')
+        st.markdown('### Generate Chapter 4-style tables from your uploaded dataset')
+        if st.button('Open Experiment Tables',type='primary',key='go_exp_tables_eval'):
+            go_to_page('Experiment Tables');st.rerun()
     elif summary:
-        empty('Ground truth not provided','You can inspect anomaly output, but accuracy measures cannot be calculated for this experiment without independently prepared labels.')
+        empty('Labels required for evaluation','Upload your own labeled observations in Dataset Laboratory, then run the detector again. No results will be invented.')
     else:
-        empty('No current experiment','The comparison above is taken directly from the thesis document. To produce new scores, load a dataset and an independent ground-truth label file.')
+        empty('No experiment has been run','Go to Dataset Laboratory, upload your data and execute the detector first.')
+        if st.button('Go to Dataset Laboratory',type='primary',key='eval_to_lab'):
+            go_to_page('Dataset Laboratory');st.rerun()
+
+elif page=='Experiment Tables':
+    section('RESEARCH / USER-RUN TESTING','Experiment results tables',
+        'Generate Chapter 4-style Tables 4.1–4.5 using your uploaded data and labels. The manuscript figures are never prefilled into these tables.')
+    if not summary:
+        empty('No uploaded experiment available','Open Dataset Laboratory to upload your dataset, labels, and run the detection first.')
+        if st.button('Go to Dataset Laboratory',key='tables_to_lab',type='primary'):
+            go_to_page('Dataset Laboratory');st.rerun()
+    elif not (folder/'ground_truth_uploaded').exists():
+        st.warning('This run does not contain stored uploaded ground-truth labels. Re-run Dataset Laboratory with a label file to generate performance tables.')
+        if st.button('Upload labeled dataset',key='tables_to_labels'):
+            go_to_page('Dataset Laboratory');st.rerun()
+    else:
+        st.caption(f'Active experiment: {summary["run_id"]}  |  Source: {", ".join(summary["uploaded_files"])}  |  Labels: {summary.get("labels_filename")}')
+        st.info('The tables below will be calculated only when you click Generate selected tables. Parameter sweeps re-run the original detection modules on your data. Larger logs and grids require more computation.')
+        with st.expander('Configure testing parameters',expanded=True):
+            c1,c2,c3=st.columns(3)
+            with c1:
+                w_tables=st.number_input('Rolling window W',min_value=10,max_value=1000,value=50,step=10,key='table_window')
+                theta_tables=st.number_input('Final Z-score threshold',min_value=0.5,max_value=20.0,value=5.5,step=0.5,key='table_theta')
+            with c2:
+                min_tables=st.number_input('Warm-up observations',min_value=3,max_value=int(w_tables),value=min(10,int(w_tables)),key='table_min')
+                ceiling_tables=st.number_input('Final safety ceiling (%)',min_value=1.0,max_value=100.0,value=85.0,step=1.0,key='table_ceil')
+            with c3:
+                debounce_tables=st.number_input('Consecutive readings',min_value=1,max_value=10,value=1,key='table_debounce')
+                delta_tables=st.number_input('Correlation ±seconds',min_value=0,max_value=3600,value=30,step=5,key='table_delta')
+            table_selection=st.multiselect('Tables to calculate',list(TABLE_DESCRIPTIONS),default=list(TABLE_DESCRIPTIONS),
+                format_func=lambda code:f'Table {code} — {TABLE_DESCRIPTIONS[code]}',key='table_selection')
+            st.caption('Table 4.2 uses a per-window warm-up of max(5, 20% of W), matching the project’s original window-sweep script.')
+            grid_mode=st.checkbox('Use full 63-combination grid for Table 4.3 (instead of selected thesis-style comparisons)',value=False,key='full_grid')
+            resamples=st.select_slider('Bootstrap resamples for Table 4.5',options=[200,1000,5000,10000],value=5000,key='bootstrap_count')
+        if st.button('Generate selected tables from this experiment',type='primary',disabled=not table_selection,use_container_width=True,key='run_table_generation'):
+            status=st.empty()
+            try:
+                with st.spinner('Running parameter sweeps and computing evaluation tables on your dataset...'):
+                    target,manifest=generate_experiment_tables(folder,selected=table_selection,
+                         window=int(w_tables),min_obs=int(min_tables),theta_final=float(theta_tables),
+                         ceiling_final=float(ceiling_tables),delta=int(delta_tables),
+                         debounce=int(debounce_tables),joint_full=bool(grid_mode),
+                         bootstrap_resamples=int(resamples),
+                         callback=lambda msg:status.caption(msg))
+                st.success(f'Completed and saved {len(manifest["tables"])} tables for experiment {summary["run_id"]}.')
+            except Exception as exc:
+                st.error(f'Table generation failed: {exc}')
+        table_root=folder/'experiment_tables'
+        batches=sorted((p for p in table_root.glob('*') if p.is_dir() and (p/'manifest.json').exists()),reverse=True)
+        table_dir=st.selectbox('View generated table batch',batches,format_func=lambda p:p.name,key='select_generated_batch') if batches else table_root
+        manifest_path=table_dir/'manifest.json'
+        if batches and manifest_path.exists():
+            manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+            st.divider()
+            st.markdown('### Generated results — your own test data')
+            st.caption(f'Computed from {manifest["source_run_id"]} | {manifest["matched_input_timestamps"]:,} matched timestamps | Label origin: {manifest["label_provenance"]}')
+            for table_id in TABLE_DESCRIPTIONS:
+                csv_path=table_dir/f'table_{table_id.replace(".","_")}.csv'
+                if not csv_path.exists() or table_id not in manifest['tables']:continue
+                st.markdown(f'#### Table {table_id} — {TABLE_DESCRIPTIONS[table_id]}')
+                data=load_table_csv(table_dir,table_id)
+                st.dataframe(data,use_container_width=True,hide_index=True,height=min(540,90+35*len(data)))
+                st.download_button(f'Download Table {table_id} (CSV)',csv_path.read_bytes(),
+                    file_name=f'{manifest["source_run_id"]}_table_{table_id.replace(".","_")}.csv',
+                    mime='text/csv',key=f'download_experiment_{table_id}')
+                if table_id=='4.5' and (table_dir/'bootstrap_detail.json').exists():
+                    details=json.loads((table_dir/'bootstrap_detail.json').read_text())
+                    low,high=details['f1_difference_95_ci']
+                    st.caption(f'Paired Enhanced − Static 80% F1 difference: {details["f1_difference_mean"]:+.4f}; 95% CI [{low:+.4f}, {high:+.4f}]; {details["resamples"]:,} resamples.')
+            st.download_button('Download experiment manifest',manifest_path.read_bytes(),
+                file_name=f'{summary["run_id"]}_table_manifest.json',mime='application/json')
+            if 'Synthetic' in manifest['label_provenance'] or 'Rule/threshold' in manifest['label_provenance']:
+                st.warning('These results use non-independent labels; they are suitable for controlled testing but not proof of generalization to real-world incidents.')
+        else:
+            empty('No tables generated yet','Configure and run the tests above. No manuscript figures are inserted into the output.')
 
 elif page=='Thesis Information':
     section('05 / Institutional profile','Thesis and research team',
@@ -587,7 +642,7 @@ elif page=='Settings':
     st.markdown('''1. Go to **Dataset Laboratory** and run the included example CSV with its labels.
 2. Open **Overview** to present disk readings, dynamic baseline and the alert priorities.
 3. Open **Alert Intelligence** to inspect the ranked alerts and audit stream.
-4. Use **Research Evaluation** to compare the selected experiment with the thesis benchmark.
+4. Use **Experiment Tables** to compute Chapter 4-style tables from your own uploaded dataset, then **Research Evaluation** for detailed metrics.
 5. Return to **Detection parameters** and change one value, then create another run for a defensible comparison.''')
 
 st.divider()

@@ -1,6 +1,7 @@
 """Isolated runs of the original thesis detection modules; no demo/fake alerts."""
 import csv
 import io
+import hashlib
 import json
 import re
 import sys
@@ -111,7 +112,7 @@ def evaluate(rows, labels, prediction=None):
 
 
 def run_dataset(datasets, labels_data=None, labels_name='', window=50, min_obs=10,
-                theta=5.5, ceiling=85.0, debounce=1, delta=30, suppress_benign=True):
+                theta=5.5, ceiling=85.0, debounce=1, delta=30, suppress_benign=True, label_provenance='Not specified'):
     run_id = datetime.now().strftime('%Y%m%d-%H%M%S-') + uuid.uuid4().hex[:6]
     folder = ROOT / 'runs' / run_id
     raw_dir = folder / 'raw'
@@ -153,10 +154,15 @@ def run_dataset(datasets, labels_data=None, labels_name='', window=50, min_obs=1
     write_jsonl(folder / 'ranked_alerts.jsonl', alerts)
     write_audit_log(scored, str(folder / 'audit_trail.jsonl'))
     labels = load_labels(labels_data, labels_name) if labels_data else None
+    if labels_data:
+        (folder / 'ground_truth_uploaded').write_bytes(labels_data)
     metrics = evaluate(scored, labels)
     static_80_metrics = evaluate(scored, labels, lambda r: r['disk_usage_value'] >= 80)
     static_85_metrics = evaluate(scored, labels, lambda r: r['disk_usage_value'] >= 85)
     summary = {'run_id':run_id, 'uploaded_files':[name for name,_ in datasets],
+               'labels_filename':labels_name if labels_data else '',
+               'label_provenance':label_provenance if labels_data else 'No labels supplied',
+               'label_sha256':hashlib.sha256(labels_data).hexdigest() if labels_data else None,
                'parsed':len(parsed), 'readings':len(scored), 'alerts':len(alerts),
                'suppressed':sum(bool(r.get('suppressed')) for r in scored),
                'high':sum(r.get('priority')=='HIGH' and r['classification']=='ABNORMAL' for r in scored),
