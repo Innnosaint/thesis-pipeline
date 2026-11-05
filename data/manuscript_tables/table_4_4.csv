@@ -1,0 +1,9 @@
+﻿Metric,Static 80%,Static 85%,Enhanced (suppression on),Hybrid (correlation = priority only)
+True positives,39,39,27,39
+False positives,25,0,0,0
+False negatives,6,6,18,6
+True negatives,"105,042","105,067","105,067","105,067"
+Precision,0.6094,1.0000,1.0000,1.0000
+Recall,0.8667,0.8667,0.6000,0.8667
+F1,0.7156,0.9286,0.7500,0.9286
+Δ F1 vs Static 80%,n/a,+0.2130,+0.0344,+0.2130
