@@ -58,6 +58,8 @@ def correlate_and_score(classified_entries, all_entries_for_context, cfg):
     benign_kw = cfg["correlation"]["benign_keywords"]
     failure_kw = cfg["correlation"]["failure_keywords"]
     weights = cfg["priority_weights"]
+    protect_critical_alerts = bool(cfg["correlation"].get("protect_critical_alerts", False))
+    critical_ceiling = cfg["zscore"].get("hard_ceiling")
 
     all_entries_sorted, timestamps = build_time_index(all_entries_for_context)
 
@@ -67,6 +69,7 @@ def correlate_and_score(classified_entries, all_entries_for_context, cfg):
             e["matched_keyword"] = None
             e["enhanced_alert_score"] = 0.0
             e["suppressed"] = False
+            e["critical_override_applied"] = False
             continue
 
         window = get_log_window(all_entries_sorted, timestamps, e["timestamp"], delta_t)
@@ -76,6 +79,13 @@ def correlate_and_score(classified_entries, all_entries_for_context, cfg):
         e["matched_keyword"] = matched_kw
         e["enhanced_alert_score"] = e["zscore"] * weights[priority]
         e["suppressed"] = (priority == "LOW")
+        e["critical_override_applied"] = False
+        if (e["suppressed"] and protect_critical_alerts
+                and critical_ceiling is not None
+                and e.get("disk_usage_value") is not None
+                and float(e["disk_usage_value"]) >= float(critical_ceiling)):
+            e["suppressed"] = False
+            e["critical_override_applied"] = True
 
     return classified_entries
 

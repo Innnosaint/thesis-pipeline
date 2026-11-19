@@ -17,6 +17,7 @@ from ingest import ingest_directory
 from preprocess import preprocess_pipeline
 from baseline import run_baseline_over_stream
 from zscore_detector import classify
+from seasonal_growth_guard import apply_srgg, SRGGConfig
 from debounce import apply_debounce
 from log_correlation import correlate_and_score
 from alert_scoring import rank_alerts, write_audit_log
@@ -112,7 +113,10 @@ def evaluate(rows, labels, prediction=None):
 
 
 def run_dataset(datasets, labels_data=None, labels_name='', window=50, min_obs=10,
-                theta=5.5, ceiling=85.0, debounce=1, delta=30, suppress_benign=True, label_provenance='Not specified'):
+                theta=5.5, ceiling=85.0, debounce=1, delta=30, suppress_benign=True, label_provenance='Not specified',
+                srgg_enabled=False, srgg_reference_days=3, srgg_persistence=3,
+                srgg_diff=11.0, srgg_growth=3.0, srgg_floor=55.0,
+                protect_critical_alerts=False):
     run_id = datetime.now().strftime('%Y%m%d-%H%M%S-') + uuid.uuid4().hex[:6]
     folder = ROOT / 'runs' / run_id
     raw_dir = folder / 'raw'
@@ -129,6 +133,7 @@ def run_dataset(datasets, labels_data=None, labels_name='', window=50, min_obs=1
     cfg['zscore']['hard_ceiling'] = ceiling
     cfg['debounce']['min_consecutive'] = debounce
     cfg['correlation']['delta_t_seconds'] = delta
+    cfg['correlation']['protect_critical_alerts'] = protect_critical_alerts
     (folder / 'config.yaml').write_text(yaml.safe_dump(cfg), encoding='utf8')
     parsed = ingest_directory(str(raw_dir), str(folder / 'drain_state.json'))
     if not parsed:
@@ -140,6 +145,12 @@ def run_dataset(datasets, labels_data=None, labels_name='', window=50, min_obs=1
         raise ValueError(f'Only {len(clean)} unique disk readings, but min_observations={min_obs}. Add more readings or lower the minimum.')
     baselined = run_baseline_over_stream(clean, window, min_obs, cfg['baseline'].get('sigma_floor',0))
     classified = classify(baselined, theta, ceiling)
+    if srgg_enabled:
+        reference_days = tuple(range(1, srgg_reference_days + 1))
+        classified = apply_srgg(classified, SRGGConfig(
+            reference_days=reference_days, persistence_readings=srgg_persistence,
+            seasonal_diff_pp=srgg_diff, hourly_growth_pp=srgg_growth,
+            min_usage_pct=srgg_floor))
     classified = apply_debounce(classified, debounce)
     scored = correlate_and_score(classified, parsed, cfg)
     if not suppress_benign:
@@ -165,13 +176,21 @@ def run_dataset(datasets, labels_data=None, labels_name='', window=50, min_obs=1
                'label_sha256':hashlib.sha256(labels_data).hexdigest() if labels_data else None,
                'parsed':len(parsed), 'readings':len(scored), 'alerts':len(alerts),
                'suppressed':sum(bool(r.get('suppressed')) for r in scored),
+               'critical_overrides':sum(bool(r.get('critical_override_applied')) for r in scored),
                'high':sum(r.get('priority')=='HIGH' and r['classification']=='ABNORMAL' for r in scored),
                'metrics':metrics,
                'static_80_metrics': static_80_metrics,
                'static_85_metrics': static_85_metrics,
                'settings': {'window':window, 'min_obs':min_obs, 'theta':theta,
                             'ceiling':ceiling, 'debounce':debounce,
-                            'delta':delta, 'suppress_benign':suppress_benign}}
+                            'delta':delta, 'suppress_benign':suppress_benign,
+                            'srgg_enabled':srgg_enabled,
+                            'srgg_reference_days':srgg_reference_days,
+                            'srgg_persistence':srgg_persistence,
+                            'srgg_diff':srgg_diff,
+                            'srgg_growth':srgg_growth,
+                            'srgg_floor':srgg_floor,
+                            'protect_critical_alerts':protect_critical_alerts}}
     (folder / 'summary.json').write_text(json.dumps(summary, indent=2), encoding='utf8')
     return folder, summary
 

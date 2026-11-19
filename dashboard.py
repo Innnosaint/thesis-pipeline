@@ -16,6 +16,9 @@ import streamlit as st
 
 from dashboard_engine import ROOT, load_run, parse_upload, run_dataset
 from experiment_tables import TABLE_DESCRIPTIONS, generate_experiment_tables, load_table_csv
+from table_4_6 import build_comparison
+from table_4_8 import append_experiment_d, compare_c_d, parse_override_audit, verify_audit_against_metrics, Table48Error
+from table_4_7 import parse_table47, parse_benign_stress, Table47Error
 
 ASSETS = ROOT / "assets"
 THESIS = ASSETS / "Thesis_Research_Document.pdf"
@@ -213,6 +216,15 @@ with st.sidebar.expander('Detection parameters', expanded=page in ('Dataset Labo
     delta=st.slider('Correlation window (seconds)',0,300,30,5)
     suppress_benign=st.toggle('Suppress benign-context alerts',True,
         help='Enabled: documented enhanced mode. Disabled: priority-only hybrid ablation.')
+    protect_critical_alerts=st.toggle('Protect critical-ceiling alerts (Experiment D)',False,
+        help='When suppression is ON, never suppress a disk reading at or above the active safety ceiling. OFF reproduces A/B/C.')
+    srgg_enabled=st.toggle('Experimental SRGG detection',False,
+        help='Additional seasonal-growth detection; requires regular 5-minute readings and 1–3 days history.')
+    srgg_reference_days=st.slider('SRGG historical days',1,3,3)
+    srgg_persistence=st.slider('SRGG persistence (readings)',1,6,3)
+    srgg_diff=st.slider('SRGG seasonal difference (pp)',3.,20.,11.,1.)
+    srgg_growth=st.slider('SRGG hourly growth (pp)',1.,8.,3.,0.5)
+    srgg_floor=st.slider('SRGG utilization floor (%)',30.,80.,55.,1.)
 
 folder_str=st.session_state.get('run_folder','')
 folder=Path(folder_str) if folder_str else None
@@ -390,7 +402,11 @@ elif page=='Dataset Laboratory':
         if st.button('Run detection analysis',type='primary',use_container_width=True,disabled=not datasets):
             try:
                 with st.spinner('Processing logs through parsing, baseline calculation, classification, correlation and scoring...'):
-                    run_folder,result=run_dataset(datasets,labels_data,labels_name,window,min_obs,theta,ceiling,debounce,delta,suppress_benign,label_provenance)
+                    run_folder,result=run_dataset(datasets,labels_data,labels_name,window,min_obs,theta,ceiling,debounce,delta,suppress_benign,label_provenance,
+                        srgg_enabled=srgg_enabled, srgg_reference_days=srgg_reference_days,
+                        srgg_persistence=srgg_persistence, srgg_diff=srgg_diff,
+                        srgg_growth=srgg_growth, srgg_floor=srgg_floor,
+                        protect_critical_alerts=protect_critical_alerts)
                     st.session_state['run_folder']=str(run_folder)
                 st.success(f'Experiment completed · {result["readings"]:,} disk observations · {result["alerts"]:,} delivered alerts. Open Experiment Tables to run the five chapter-style tests.')
             except Exception as exc:
@@ -446,7 +462,7 @@ elif page=='Alert Intelligence':
         filter_priorities=st.multiselect('Priority filter',['HIGH','MEDIUM','LOW'],default=['HIGH','MEDIUM','LOW'])
         if cat!='All readings':view=view.loc[view.priority.isin(filter_priorities)]
         view=view.sort_values('enhanced_alert_score',ascending=False)
-        columns=['timestamp','log_source','disk_usage_value','baseline_mu','zscore','classification','triggered_by','priority','matched_keyword','enhanced_alert_score','suppressed']
+        columns=['timestamp','log_source','disk_usage_value','baseline_mu','zscore','classification','triggered_by','srgg_eligible','srgg_reference','srgg_seasonal_delta','srgg_hourly_growth','srgg_streak','srgg_new_detection','priority','matched_keyword','enhanced_alert_score','critical_override_applied','suppressed']
         columns=[col for col in columns if col in view.columns]
         st.dataframe(view[columns],use_container_width=True,hide_index=True,height=425)
         c1,c2,c3=st.columns(3)
@@ -572,6 +588,190 @@ elif page=='Experiment Tables':
                 st.warning('These results use non-independent labels; they are suitable for controlled testing but not proof of generalization to real-world incidents.')
         else:
             empty('No tables generated yet','Configure and run the tests above. No manuscript figures are inserted into the output.')
+
+
+    # TABLE_4_6_INCREMENTAL_COMPARISON_START
+    st.divider()
+    st.markdown('### Table 4.6 — Incremental Algorithm Performance Comparison')
+    st.caption('Compare three previously exported Research Evaluation metrics files. This is independent of the original Tables 4.1–4.5 sensitivity sweeps.')
+    with st.expander('Upload A / B / C metrics for Table 4.6', expanded=True):
+        ca, cb, cc = st.columns(3)
+        with ca:
+            table46_a = st.file_uploader('A — Existing detector', type=['json'], key='table46_a')
+        with cb:
+            table46_b = st.file_uploader('B — Existing + Original SRGG', type=['json'], key='table46_b')
+        with cc:
+            table46_c = st.file_uploader('C — Full pipeline with suppression', type=['json'], key='table46_c')
+        table46_d = st.file_uploader('D — SRGG + critical-ceiling override (optional)', type=['json'], key='table46_d')
+        st.warning('The metrics exports contain no dataset ID or parameter settings. Confirm A, B, C use the same dataset, synthetic injection labels and scoring settings; only SRGG/suppression should differ. Matching counts do not guarantee matching data.')
+        if all([table46_a, table46_b, table46_c]):
+            try:
+                m46_a = json.loads(table46_a.getvalue().decode('utf-8-sig'))
+                m46_b = json.loads(table46_b.getvalue().decode('utf-8-sig'))
+                m46_c = json.loads(table46_c.getvalue().decode('utf-8-sig'))
+                table46_rows = build_comparison(m46_a, m46_b, m46_c)
+                if table46_d is not None:
+                    m46_d = json.loads(table46_d.getvalue().decode('utf-8-sig'))
+                    table46_rows = append_experiment_d(table46_rows, m46_d)
+            except (ValueError, UnicodeError) as exc:
+                st.error(f'Cannot generate Table 4.6: {exc}')
+            else:
+                table46_frame = pd.DataFrame(table46_rows)
+                st.markdown('#### Table 4.6 — Results from your uploaded experiments')
+                st.dataframe(table46_frame, use_container_width=True, hide_index=True)
+                plot46 = pd.DataFrame([
+                    {'Method': f'Experiment {row["Experiment"]}',
+                     'Precision': row['Precision (%)'] / 100,
+                     'Recall': row['Recall (%)'] / 100,
+                     'F1': row['F1-score (%)'] / 100}
+                    for row in table46_rows
+                ])
+                st.markdown('#### Precision, Recall, and F1 by experiment')
+                comparison_chart(plot46)
+                gain_ab = table46_rows[1]['F1-score (%)'] - table46_rows[0]['F1-score (%)']
+                gain_bc = table46_rows[2]['F1-score (%)'] - table46_rows[1]['F1-score (%)']
+                c1, c2 = st.columns(2)
+                c1.metric('F1 change: B versus A', f'{gain_ab:+.2f} percentage points')
+                c2.metric('F1 change: C versus B', f'{gain_bc:+.2f} percentage points')
+                if len(table46_rows) == 4:
+                    gain_cd = table46_rows[3]['F1-score (%)'] - table46_rows[2]['F1-score (%)']
+                    st.metric('F1 change: D versus C', f'{gain_cd:+.2f} percentage points')
+                st.download_button('Download Table 4.6 (CSV)',
+                    table46_frame.to_csv(index=False).encode('utf-8'),
+                    file_name='table_4_6_incremental_algorithm_performance.csv',
+                    mime='text/csv', key='download_table46')
+                st.caption('Interpretation: additional SRGG detections are not independently verified here. These exports report classification metrics on the synthetic injection-label benchmark; event-level early warning and benign-growth tests are separate requirements.')
+        else:
+            st.info('Upload all three JSON files to calculate Table 4.6. Files may be named A_metrics.json, B_metrics.json, C_metrics.json, or C_metrics(1).json.')
+    # TABLE_4_6_INCREMENTAL_COMPARISON_END
+
+    # TABLE_4_7_VERIFIED_EPISODE_COMPARISON_START
+    st.divider()
+    st.markdown('### Table 4.7 — Gradual-Degradation Detection Evaluation')
+    st.caption('Import a label-verified episode CSV derived from the aligned A/B/C scored streams and the original injected labels. This table does not alter detection decisions.')
+    t47_upload = st.file_uploader('Upload Table 4.7 label-verified episode CSV', type=['csv'], key='table47_upload')
+    if t47_upload is None:
+        st.info('Upload Table_4_7_Label_Verified_Gradual_Degradation.csv, included in the installation kit. Rebuild this CSV if you change the dataset, labels, or algorithm settings.')
+    else:
+        try:
+            t47_rows, t47_stats = parse_table47(t47_upload.getvalue())
+        except (Table47Error, UnicodeError, ValueError) as exc:
+            st.error(f'Cannot load Table 4.7: {exc}')
+        else:
+            t47_df = pd.DataFrame(t47_rows)
+            st.dataframe(t47_df, use_container_width=True, hide_index=True)
+            x1,x2,x3 = st.columns(3)
+            x1.metric('Mean existing delay', f'{t47_stats["mean_existing_delay_min"]:.1f} min')
+            x2.metric('Mean SRGG delay', f'{t47_stats["mean_srgg_delay_min"]:.1f} min')
+            x3.metric('Mean improvement', f'{t47_stats["mean_improvement_min"]:+.1f} min')
+            t47_chart = go.Figure()
+            for col,label,color in [
+                ('Existing delay (min)','Existing detector','#75B9EE'),
+                ('SRGG delay (min)','Original SRGG','#52D6BC')]:
+                t47_chart.add_trace(go.Bar(name=label,x=t47_df['Episode'],y=t47_df[col],marker_color=color))
+            t47_chart.update_layout(barmode='group',height=330,
+                yaxis_title='Minutes after injected-label onset',
+                margin=dict(l=10,r=10,t=20,b=30),
+                paper_bgcolor='#10263e',plot_bgcolor='#10263e',
+                font=dict(color='#EDF4FC'),legend=dict(orientation='h',y=1.13))
+            st.plotly_chart(t47_chart,use_container_width=True,config={'displayModeBar':False})
+            st.warning(f'The {t47_stats["total_preonset_false_positives"]} pre-onset SRGG alerts in these episodes are false positives under the supplied injection-label definition. Do not silently relabel them.')
+            st.caption('Detection delay is measured from the first labeled positive to the first delivered alert within that labeled episode. A zero-minute delay is not proof of zero physical failure-detection latency. These results were derived from a synthetic benchmark.')
+            st.download_button('Download Table 4.7 (CSV)',
+                t47_df.to_csv(index=False).encode('utf-8'),
+                file_name='table_4_7_verified_gradual_degradation.csv',
+                mime='text/csv',key='download_table47')
+    st.divider()
+    st.markdown('### Supplementary Validation — Legitimate Growth Stress Test')
+    st.caption('This validation uses deliberately normal synthetic workloads. Its purpose is to identify false-alert limitations of SRGG, not to inflate F1.')
+    t47stress_upload = st.file_uploader('Upload benign_growth_stress_results.csv',type=['csv'],key='table47stress')
+    if t47stress_upload is not None:
+        try:
+            t47stress_rows = parse_benign_stress(t47stress_upload.getvalue())
+        except (Table47Error,UnicodeError,ValueError) as exc:
+            st.error(f'Cannot load stress results: {exc}')
+        else:
+            t47stress_df=pd.DataFrame(t47stress_rows)
+            st.dataframe(t47stress_df,use_container_width=True,hide_index=True)
+            pivot=t47stress_df.pivot(index='Scenario',columns='Method',values='False-alert observations')
+            plot47stress=go.Figure()
+            for j,method in enumerate(pivot.columns):
+                plot47stress.add_trace(go.Bar(name=str(method),x=pivot.index,
+                                             y=pivot[method].fillna(0),
+                                             marker_color=['#75B9EE','#52D6BC','#D8B475'][j%3]))
+            plot47stress.update_layout(barmode='group',height=360,
+                yaxis_title='False-alert observations (lower is better)',
+                margin=dict(l=5,r=5,t=20,b=95),paper_bgcolor='#10263e',
+                plot_bgcolor='#10263e',font=dict(color='#EDF4FC'))
+            st.plotly_chart(plot47stress,use_container_width=True,config={'displayModeBar':False})
+            st.warning('These are researcher-defined normal scenarios. Every alert counts as a false alert in this test. They do not establish general production performance.')
+            st.download_button('Download stress comparison (CSV)',
+                t47stress_df.to_csv(index=False).encode('utf-8'),
+                file_name='srgg_benign_growth_validation.csv',
+                mime='text/csv',key='download_table47_stress')
+    else:
+        st.info('Run validate_benign_growth.py from the installation kit, then upload runs/srgg_validation/benign_growth_stress_results.csv to visualize the detector tradeoff.')
+    # TABLE_4_7_VERIFIED_EPISODE_COMPARISON_END
+
+    # TABLE_4_8_CRITICAL_OVERRIDE_COMPARISON_START
+    st.divider()
+    st.markdown('### Table 4.8 — Contextual Suppression and Critical-Ceiling Override Evaluation')
+    st.caption('Measure the difference between Experiment C (suppression without override) and Experiment D (suppression with critical-ceiling override). This is alert handling, not a second detection algorithm.')
+    with st.expander('Upload Experiment C / D metrics and verified suppression audit', expanded=True):
+        t48_left, t48_right = st.columns(2)
+        with t48_left:
+            t48_c = st.file_uploader('C — SRGG + suppression (current_evaluation.json)', type=['json'], key='table48_c')
+        with t48_right:
+            t48_d = st.file_uploader('D — SRGG + suppression + critical override (current_evaluation.json)', type=['json'], key='table48_d')
+        t48_audit = st.file_uploader('Critical override audit: Experiment_D_critical_override_audit.csv', type=['csv'], key='table48_audit')
+        st.caption('Use C_metrics.json, D_metrics.json, and the CSV produced by comparing C_scored and D_scored with the injection labels. Different filenames are fine; matching totals alone do not guarantee identical dataset provenance.')
+        if t48_c is not None and t48_d is not None:
+            try:
+                t48_metrics_c = json.loads(t48_c.getvalue().decode('utf-8-sig'))
+                t48_metrics_d = json.loads(t48_d.getvalue().decode('utf-8-sig'))
+                t48_rows, t48_delta = compare_c_d(t48_metrics_c, t48_metrics_d)
+            except (Table48Error, ValueError, UnicodeError) as exc:
+                st.error(f'Table 4.8 metrics error: {exc}')
+            else:
+                t48_df = pd.DataFrame(t48_rows)
+                st.dataframe(t48_df, use_container_width=True, hide_index=True)
+                t48_stats1, t48_stats2, t48_stats3 = st.columns(3)
+                t48_stats1.metric('Restored true-positive readings', f'{t48_delta["tp"]:+d}')
+                t48_stats2.metric('Change in false positives', f'{t48_delta["fp"]:+d}')
+                t48_stats3.metric('F1 change (D vs C)', f'{t48_delta["f1_pp"]:+.2f} pp')
+                t48_chart=go.Figure()
+                for col,label,color in [('Recall (%)','Recall','#75B9EE'),('F1-score (%)','F1-score','#52D6BC')]:
+                    t48_chart.add_trace(go.Bar(name=label, x=t48_df['Experiment'], y=t48_df[col], marker_color=color))
+                t48_chart.update_layout(barmode='group', height=320, yaxis_title='Percent', yaxis_range=[0, 105],
+                    margin=dict(l=10,r=10,t=20,b=30), paper_bgcolor='#10263e', plot_bgcolor='#10263e',
+                    font=dict(color='#EDF4FC'), legend=dict(orientation='h',y=1.13))
+                st.plotly_chart(t48_chart, use_container_width=True, config={'displayModeBar':False})
+                st.download_button('Download Table 4.8 comparison (CSV)',
+                    t48_df.to_csv(index=False).encode('utf-8'),
+                    file_name='table_4_8_critical_override_comparison.csv', mime='text/csv', key='download_table48')
+                if t48_audit is not None:
+                    try:
+                        t48_evidence, t48_audit_summary = parse_override_audit(t48_audit.getvalue(), ceiling=85.0)
+                        verify_audit_against_metrics(t48_delta, t48_audit_summary)
+                    except (Table48Error, ValueError, UnicodeError) as exc:
+                        st.error(f'Table 4.8 audit could not be reconciled with the metrics: {exc}')
+                    else:
+                        st.success(f'Verified {t48_audit_summary["restored"]} critical alert readings restored. Override audit and metric changes agree.')
+                        st.markdown('#### Restored alerts by contextual keyword')
+                        t48_kw_df=pd.DataFrame([{'Keyword':key,'Restored alerts':value} for key,value in sorted(t48_audit_summary['keywords'].items(),key=lambda p:-p[1])])
+                        st.dataframe(t48_kw_df, use_container_width=True, hide_index=True)
+                        st.markdown('#### Detailed restored alert records')
+                        t48_evidence_df=pd.DataFrame(t48_evidence)
+                        st.dataframe(t48_evidence_df,use_container_width=True,hide_index=True)
+                        st.download_button('Download verified Table 4.8 restored-alert audit (CSV)',
+                            t48_evidence_df.to_csv(index=False).encode('utf-8'),
+                            file_name='table_4_8_verified_restored_alerts.csv', mime='text/csv', key='download_table48_audit')
+                else:
+                    st.info('Upload the optional override audit CSV to verify exactly which critical alert readings were restored.')
+                st.warning('C to D measures a suppression safeguard, not a new detection enhancement. Report effects only for the synthetic injection-label benchmark; stronger real-world validation is still needed.')
+        else:
+            st.info('Upload the C and D metrics JSON files to calculate Table 4.8. The audit CSV provides observation-level verification.')
+    # TABLE_4_8_CRITICAL_OVERRIDE_COMPARISON_END
 
 elif page=='Thesis Information':
     section('05 / Institutional profile','Thesis and research team',
