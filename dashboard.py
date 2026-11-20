@@ -442,20 +442,79 @@ elif page=='Alert Intelligence':
             ('High priority',f'{(actionable.priority=="HIGH").sum():,}','Failure evidence','#D8B475'),
             ('Suppressed',f'{int(df.suppressed.sum()):,}','Retained in audit history','#75B9EE'),
         ])
-        st.markdown('### Highest-ranked alerts')
-        top=actionable.sort_values('enhanced_alert_score',ascending=False).head(4)
-        if len(top):
-            cols=st.columns(2,gap='medium')
-            for i,(_,rec) in enumerate(top.iterrows()):
-                with cols[i%2]:
-                    priority=str(rec.get('priority','MEDIUM'))
-                    color='#D6869E' if priority=='HIGH' else '#D8B475' if priority=='MEDIUM' else '#52D6BC'
-                    dt=rec['timestamp'].strftime('%Y-%m-%d %H:%M:%S') if pd.notna(rec['timestamp']) else 'Timestamp unavailable'
-                    st.markdown(f'<div class="alert-card"><div><div class="alert-priority" style="color:{color}">{esc(priority)} PRIORITY</div>'
-                                f'<div class="alert-name">{float(rec["disk_usage_value"]):.1f}% disk utilization</div>'
-                                f'<div class="alert-meta">{esc(dt)}<br>Context: {esc(rec.get("matched_keyword") or "No signature identified")}</div></div>'
-                                f'<div class="alert-score">{float(rec["enhanced_alert_score"]):.2f}</div></div>',unsafe_allow_html=True)
-        else: st.info('No delivered alerts under the selected experiment parameters.')
+        st.markdown('### High-Priority Alert Occurrences')
+        high_alerts = actionable.loc[actionable['priority'].eq('HIGH')].copy()
+
+        if high_alerts.empty:
+            st.info('No delivered HIGH-priority alerts in this experiment.')
+        else:
+            # These are matched log keywords, not confirmed root causes.
+            if 'matched_keyword' not in high_alerts.columns:
+                high_alerts['matched_keyword'] = None
+            high_alerts['context_label'] = (
+                high_alerts['matched_keyword']
+                .fillna('No matched log context')
+                .astype(str)
+                .str.strip()
+                .replace('', 'No matched log context')
+            )
+
+            frequency = (
+                high_alerts.groupby('context_label', as_index=False)
+                .agg(
+                    occurrences=('context_label', 'size'),
+                    highest_utilization=('disk_usage_value', 'max'),
+                )
+                .sort_values(['occurrences', 'context_label'], ascending=[False, True])
+            )
+
+            fig = go.Figure(
+                go.Bar(
+                    x=frequency['occurrences'],
+                    y=frequency['context_label'],
+                    orientation='h',
+                    marker=dict(color='#36C5EF', line=dict(color='#85DDF9', width=0.5)),
+                    text=frequency['occurrences'].map(lambda n: f'{n:,}'),
+                    textposition='outside',
+                    cliponaxis=False,
+                    customdata=frequency[['highest_utilization']].to_numpy(),
+                    hovertemplate=(
+                        '<b>%{y}</b><br>'
+                        'High-priority alert readings: %{x}<br>'
+                        'Highest observed disk usage: %{customdata[0]:.1f}%'
+                        '<extra></extra>'
+                    ),
+                )
+            )
+            fig.update_layout(
+                title=dict(text='Alert Count by Matched Log Context', font=dict(size=17)),
+                template='plotly_dark',
+                paper_bgcolor='#102741',
+                plot_bgcolor='#102741',
+                font=dict(color='#EDF4FC', family='Inter, Arial, sans-serif'),
+                showlegend=False,
+                margin=dict(l=12, r=58, t=60, b=55),
+                height=max(315, 165 + len(frequency) * 55),
+                bargap=0.28,
+                xaxis=dict(
+                    title='Number of high-priority alert readings',
+                    rangemode='tozero',
+                    range=[0, max(1, frequency['occurrences'].max()) * 1.22 + 0.3],
+                    gridcolor='#2B4662',
+                    zeroline=False,
+                ),
+                yaxis=dict(title='', autorange='reversed', showgrid=False),
+            )
+            if frequency['occurrences'].max() <= 15:
+                fig.update_xaxes(dtick=1)
+
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            st.caption(
+                f'{len(high_alerts):,} delivered high-priority alert readings across '
+                f'{len(frequency)} matched log-context categories. '
+                'Counts are readings, not unique incidents. '
+                'Matched keywords are supporting context, not confirmed causes.'
+            )
         st.markdown('### Detailed event explorer')
         cat=st.selectbox('Classification',['Delivered alerts','All anomalous events','All readings'])
         view=actionable if cat=='Delivered alerts' else abnormal if cat=='All anomalous events' else df
